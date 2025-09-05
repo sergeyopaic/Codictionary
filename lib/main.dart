@@ -52,6 +52,91 @@ void main() {
   runApp(const MyApp());
 }
 
+void showAddedWordPopup(BuildContext context) {
+  final overlay = Overlay.of(context);
+  final entry = OverlayEntry(
+    builder: (context) => Positioned(
+      right: 16,
+      bottom: 80,
+      child: _AnimatedPopup(),
+    ),
+  );
+
+  overlay.insert(entry);
+  Future.delayed(const Duration(seconds: 2), () {
+    entry.remove();
+  });
+}
+
+class _AnimatedPopup extends StatefulWidget {
+  @override
+  State<_AnimatedPopup> createState() => _AnimatedPopupState();
+}
+
+class _AnimatedPopupState extends State<_AnimatedPopup>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    )..forward();
+
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Карточка "Word added!"
+          Card(
+            color: Colors.green.shade300,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.check, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text(
+                    "Word added!",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Гифка сверху карточки
+          Positioned(
+            top: -60, // немного приподняли
+            child: Image.asset(
+              "lib/media/clap_up.gif",
+              width: 80,
+              height: 80,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+}
 
 
 class MyApp extends StatelessWidget {
@@ -145,6 +230,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       });
       await saveDict(words);
       Navigator.pop(context);
+      showAddedWordPopup(context);
     }
     
     await showDialog(
