@@ -58,7 +58,7 @@ Future<void> showGPTTestDialog(BuildContext context) async {
                 Uri.parse("https://api.openai.com/v1/responses"),
                 headers: {
                   "Content-Type": "application/json",
-                  "Authorization": "Bearer $OPENAI_API_KEY",
+                  "Authorization": "Bearer $apiKey",
                 },
                 body: jsonEncode({
                   "model": "gpt-4.1-mini",
