@@ -13,29 +13,46 @@ final apiKey = dotenv.env['OPENAI_API_KEY'];
 const String API_KEY = "3d24a792-7f04-4396-9446-528aa5d638b2:fx";
 const String TRANSLATE_URL = "https://api-free.deepl.com/v2/translate";
 const String GPT5_MINI_URL = "https://api.openai.com/v1/responses";
-
 Future<String> askGPT5Mini(String prompt) async {
-  final response = await http.post(
-    Uri.parse(GPT5_MINI_URL),
+  final resp = await http.post(
+    Uri.parse(GPT5_MINI_URL), // https://api.openai.com/v1/responses
     headers: {
       "Content-Type": "application/json",
       "Authorization": "Bearer $apiKey",
     },
     body: jsonEncode({
-      "model": "gpt-5-mini",
+      "model": "gpt-4.1-mini", // не "gpt-5-mini"
       "input": prompt,
       "temperature": 1,
-      "max_output_tokens": 200,
+      "max_output_tokens": 400, // можно 200–500
     }),
   );
 
-  if (response.statusCode != 200) {
-    throw Exception("Ошибка API: ${response.body}");
+  if (resp.statusCode != 200) {
+    throw Exception("OpenAI API error: ${resp.statusCode} ${resp.body}");
   }
 
-  final data = jsonDecode(response.body);
-  // GPT возвращает массив choices, берём первый
-  return data['choices'][0]['message']['content'];
+  final data = jsonDecode(resp.body);
+
+  // Response API: data['output'] — список сообщений, каждое содержит content[]
+  final output = data['output'] as List<dynamic>? ?? const [];
+  if (output.isEmpty) return "No output from model.";
+
+  final first =
+      output.first as Map<String, dynamic>?; // {id, type, role, content, ...}
+  final content = first?['content'] as List<dynamic>? ?? const [];
+
+  // Ищем text-часть (обычно type == 'output_text')
+  String? text;
+  for (final part in content) {
+    final p = part as Map<String, dynamic>;
+    if (p['text'] is String) {
+      text = p['text'] as String;
+      break;
+    }
+  }
+
+  return text ?? "No text in response.";
 }
 
 Future<void> showGPTTestDialog(BuildContext context) async {
@@ -308,6 +325,81 @@ class MyApp extends StatelessWidget {
   }
 }
 
+class CodeDictionaryTitle extends StatelessWidget {
+  const CodeDictionaryTitle({
+    super.key,
+    this.text = 'Codictionary',
+    this.fontSize = 45.0, // размер шрифта в AppBar
+    this.strokeWidth = 3.0, // толщина обводки
+    this.strokeColor = const Color(0xCC000000),
+    this.fillColor = Colors.white, // цвет заливки текста
+    this.imagePath = 'assets/images/mascot.png',
+    this.gap = 8.0, // отступ между маскотом и текстом
+    this.fontFamily, // 'CodictionaryCartoon' если добавил шрифт
+  });
+
+  final String text;
+  final double fontSize;
+  final double strokeWidth;
+  final Color strokeColor;
+  final Color fillColor;
+  final String imagePath;
+  final double gap;
+  final String? fontFamily;
+
+  @override
+  Widget build(BuildContext context) {
+    // высота картинки ≈ высоте текста (чуть больше, чтобы визуально совпало)
+    final double imageHeight = fontSize * 1.15;
+
+    final TextStyle base = TextStyle(
+      fontSize: fontSize,
+      height: 1.0, // плотнее посадка
+      letterSpacing: 0.5,
+      fontFamily: fontFamily, // 'CodictionaryCartoon' если подключил шрифт
+      fontWeight: FontWeight.w700,
+    );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          imagePath,
+          height: imageHeight,
+          filterQuality: FilterQuality.high,
+        ),
+        SizedBox(width: gap),
+        // Двойной текст: обводка + заливка
+        Stack(
+          children: [
+            // Обводка
+            Text(
+              text,
+              style: base.copyWith(
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = strokeWidth
+                  ..color = strokeColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              softWrap: false,
+            ),
+            // Заливка
+            Text(
+              text,
+              style: base.copyWith(color: fillColor),
+              maxLines: 1,
+              overflow: TextOverflow.fade,
+              softWrap: false,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class DictionaryScreen extends StatefulWidget {
   const DictionaryScreen({super.key});
   @override
@@ -360,45 +452,172 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     }
   }
 
+  Future<void> _showWordExplanation(BuildContext context, int index) async {
+    if (index < 0 || index >= words.length) {
+      // на всякий случай, если indexOf вернул -1
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Word not found.')));
+      return;
+    }
+
+    String gptAnswer =
+        words[index]["desc"] ?? "Нет описания. Нажмите «Regenerate text».";
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            Future<void> regenerate() async {
+              setState(() => gptAnswer = "Loading...");
+              try {
+                final eng = words[index]["eng"] ?? "";
+                final prompt =
+                    'Приведи пример использования слова "$eng" на английском языке. '
+                    'Дай русскоязычное описание длиной примерно 200 слов о том, как это слово переводится и где используется.';
+                final newText = await askGPT5Mini(prompt);
+                if (!context.mounted) return;
+                setState(() => gptAnswer = newText);
+
+                // обновляем и сохраняем
+                words[index]["desc"] = newText;
+                await saveDict(words);
+              } catch (e) {
+                if (!context.mounted) return;
+                setState(() => gptAnswer = "Ошибка: $e");
+              }
+            }
+
+            return AlertDialog(
+              title: Text('Explanation for "${words[index]["eng"] ?? ""}"'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SingleChildScrollView(child: Text(gptAnswer)),
+                    if (gptAnswer == "Loading...") ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text('Generating...'),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: gptAnswer == "Loading..." ? null : regenerate,
+                  child: const Text("Regenerate text"),
+                ),
+                TextButton(
+                  onPressed: gptAnswer == "Loading..."
+                      ? null
+                      : () => Navigator.pop(context),
+                  child: const Text("Close"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _addOrEditWord({int? index}) async {
     Timer? debounceTimer;
+
     final engController = TextEditingController(
-      text: index != null ? words[index]["eng"] : '',
+      text: index != null ? (words[index]["eng"] ?? '') : '',
+    );
+    final rusController = TextEditingController(
+      text: index != null ? (words[index]["rus"] ?? '') : '',
     );
 
-    final rusController = TextEditingController(
-      text: index != null ? words[index]["rus"] : '',
-    );
     final engFocus = FocusNode();
     final rusFocus = FocusNode();
+
     bool autoTranslate = true;
+    bool isSaving = false;
+
+    // <-- объявляем заранее, чтобы замыкания могли ссылаться
+    StateSetter? _setDialogState;
+
     Future<void> save() async {
       final eng = engController.text.trim();
       String rus = rusController.text.trim();
       if (eng.isEmpty) return;
 
+      // автоперевод при пустом RUS
       if (autoTranslate && rus.isEmpty) {
-        rus = await translateWord(eng);
+        try {
+          rus = await translateWord(eng);
+        } catch (_) {
+          // оставляем как ввёл пользователь
+          rus = rusController.text.trim();
+        }
       }
 
-      final newEntry = {"eng": eng, "rus": rus};
+      // показываем спиннер в диалоге
+      _setDialogState?.call(() => isSaving = true);
+
+      // генерируем описание ТОЛЬКО при добавлении
+      String? desc = index != null ? (words[index]["desc"]) : null;
+      if (index == null) {
+        final prompt =
+            'Приведи пример использования слова "$eng" на английском языке. '
+            'Дай русскоязычное описание длиной примерно 200 слов о том, как это слово переводится и где используется.';
+        try {
+          desc = await askGPT5Mini(prompt);
+        } catch (e) {
+          desc = 'Ошибка при генерации описания: $e';
+        }
+      }
+
+      final newEntry = <String, String>{
+        "eng": eng,
+        "rus": rus,
+        if (desc != null) "desc": desc,
+      };
+
+      if (!mounted) return;
+
       setState(() {
         if (index == null) {
           words.add(newEntry);
         } else {
-          words[index] = newEntry;
+          words[index] =
+              newEntry; // desc оставляем как было, если редактирование
         }
         _filterWords();
       });
+
       await saveDict(words);
+
+      if (!mounted) return;
       Navigator.pop(context);
       showAddedWordPopup(context);
     }
 
     await showDialog(
       context: context,
+      barrierDismissible: !isSaving,
       builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) {
+        builder: (context, innerSetState) {
+          // присваиваем ссылку, чтобы save() мог обновлять диалог
+          _setDialogState = innerSetState;
+
           return AlertDialog(
             title: Text(index == null ? "Add Word" : "Edit Word"),
             content: Column(
@@ -410,6 +629,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   autofocus: true,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(labelText: "English"),
+                  enabled: !isSaving,
                   onSubmitted: (_) => save(),
                   onChanged: (text) {
                     if (!autoTranslate || text.trim().isEmpty) return;
@@ -417,7 +637,11 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                     debounceTimer = Timer(
                       const Duration(milliseconds: 500),
                       () async {
-                        rusController.text = await translateWord(text.trim());
+                        try {
+                          rusController.text = await translateWord(text.trim());
+                        } catch (_) {
+                          // игнорируем ошибку автоперевода
+                        }
                       },
                     );
                   },
@@ -427,32 +651,54 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   focusNode: rusFocus,
                   decoration: const InputDecoration(labelText: "Russian"),
                   textInputAction: TextInputAction.done,
+                  enabled: !isSaving,
                   onSubmitted: (_) => save(),
                 ),
                 Row(
                   children: [
                     Checkbox(
                       value: autoTranslate,
-                      onChanged: (v) => setDialogState(() {
-                        autoTranslate = v ?? true;
-                      }),
+                      onChanged: isSaving
+                          ? null
+                          : (v) => innerSetState(() {
+                              autoTranslate = v ?? true;
+                            }),
                     ),
                     const Text("Auto-translate"),
                   ],
                 ),
+                if (isSaving) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: const [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 10),
+                      Text("Generating & saving..."),
+                    ],
+                  ),
+                ],
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: isSaving ? null : () => Navigator.pop(context),
                 child: const Text("Cancel"),
               ),
-              ElevatedButton(onPressed: save, child: const Text("Save")),
+              ElevatedButton(
+                onPressed: isSaving ? null : save,
+                child: const Text("Save"),
+              ),
             ],
           );
         },
       ),
     );
+
+    debounceTimer?.cancel();
   }
 
   Future<void> _deleteWord(int index) async {
@@ -467,22 +713,19 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Codictionary"),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(56),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: TextField(
-              controller: searchController,
-              decoration: const InputDecoration(
-                hintText: "Search...",
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-            ),
-          ),
+        // если подключил шрифт в pubspec, передай fontFamily: 'CodictionaryCartoon'
+        title: const CodeDictionaryTitle(
+          fontSize: 65, // подгони под высоту AppBar
+          strokeWidth: 5, // «слегка мультяшно» — не переборщи
+          fillColor: Color.fromARGB(
+            255,
+            231,
+            255,
+            223,
+          ), // можно заменить на тему
+          strokeColor: Color(0xCC000000),
+          fontFamily: 'CodictionaryCartoon',
+          imagePath: 'lib/media/CODY.png',
         ),
       ),
       body: Column(
@@ -509,6 +752,11 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove_red_eye),
+                        onPressed: () =>
+                            _showWordExplanation(context, words.indexOf(word)),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.edit),
                         onPressed: () =>
