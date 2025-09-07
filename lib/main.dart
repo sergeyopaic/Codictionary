@@ -4,11 +4,121 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter/services.dart' show rootBundle; // сверху файла
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+final apiKey = dotenv.env['OPENAI_API_KEY'];
 
 // ====== Конфиг ======
 const String API_KEY = "3d24a792-7f04-4396-9446-528aa5d638b2:fx";
 const String TRANSLATE_URL = "https://api-free.deepl.com/v2/translate";
+const String GPT5_MINI_URL = "https://api.openai.com/v1/responses";
+
+Future<String> askGPT5Mini(String prompt) async {
+  final response = await http.post(
+    Uri.parse(GPT5_MINI_URL),
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer $apiKey",
+    },
+    body: jsonEncode({
+      "model": "gpt-5-mini",
+      "input": prompt,
+      "temperature": 1,
+      "max_output_tokens": 200,
+    }),
+  );
+
+  if (response.statusCode != 200) {
+    throw Exception("Ошибка API: ${response.body}");
+  }
+
+  final data = jsonDecode(response.body);
+  // GPT возвращает массив choices, берём первый
+  return data['choices'][0]['message']['content'];
+}
+
+Future<void> showGPTTestDialog(BuildContext context) async {
+  final TextEditingController promptController = TextEditingController();
+  String gptAnswer = "Waiting for response...";
+
+  await showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          Future<void> sendPrompt() async {
+            final prompt = promptController.text.trim();
+            if (prompt.isEmpty) return;
+
+            setState(() => gptAnswer = "Loading...");
+
+            try {
+              final resp = await http.post(
+                Uri.parse("https://api.openai.com/v1/responses"),
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": "Bearer $OPENAI_API_KEY",
+                },
+                body: jsonEncode({
+                  "model": "gpt-4.1-mini",
+                  "input": prompt,
+                  "temperature": 1,
+                  "max_output_tokens": 500,
+                }),
+              );
+
+              if (resp.statusCode == 200) {
+                final data = jsonDecode(resp.body);
+                final output = data['output'] as List<dynamic>? ?? [];
+                final firstMessage = output.isNotEmpty ? output[0] : null;
+                final text = firstMessage != null
+                    ? (firstMessage['content'] as List<dynamic>)[0]['text']
+                          as String
+                    : "No content";
+
+                setState(() => gptAnswer = text);
+              } else {
+                setState(
+                  () => gptAnswer = "Error: ${resp.statusCode} ${resp.body}",
+                );
+              }
+            } catch (e) {
+              setState(() => gptAnswer = "Exception: $e");
+            }
+          }
+
+          return AlertDialog(
+            title: const Text("GPT Test"),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: promptController,
+                    decoration: const InputDecoration(
+                      labelText: "Enter prompt",
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(gptAnswer, style: const TextStyle(fontSize: 14)),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Close"),
+              ),
+              ElevatedButton(onPressed: sendPrompt, child: const Text("Send")),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
 
 // ====== Утилиты ======
 Future<File> _getDictFile() async {
@@ -98,7 +208,13 @@ Future<String> translateWord(String word) async {
 }
 
 // ====== Приложение ======
-void main() {
+Future<void> main() async {
+  // обязательно нужно вызвать, чтобы инициализировать биндинги Flutter
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // загружаем переменные из .env
+  await dotenv.load(fileName: ".env");
+
   runApp(const MyApp());
 }
 
@@ -249,12 +365,13 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     final engController = TextEditingController(
       text: index != null ? words[index]["eng"] : '',
     );
+
     final rusController = TextEditingController(
       text: index != null ? words[index]["rus"] : '',
     );
     final engFocus = FocusNode();
+    final rusFocus = FocusNode();
     bool autoTranslate = true;
-
     Future<void> save() async {
       final eng = engController.text.trim();
       String rus = rusController.text.trim();
@@ -290,8 +407,10 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                 TextField(
                   controller: engController,
                   focusNode: engFocus,
-                  decoration: const InputDecoration(labelText: "English"),
                   autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(labelText: "English"),
+                  onSubmitted: (_) => save(),
                   onChanged: (text) {
                     if (!autoTranslate || text.trim().isEmpty) return;
                     debounceTimer?.cancel();
@@ -305,7 +424,10 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                 ),
                 TextField(
                   controller: rusController,
+                  focusNode: rusFocus,
                   decoration: const InputDecoration(labelText: "Russian"),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => save(),
                 ),
                 Row(
                   children: [
@@ -363,58 +485,60 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           ),
         ),
       ),
-      body: ReorderableListView.builder(
-        itemCount: filteredWords.length,
-        onReorder: (oldIndex, newIndex) {
-          setState(() {
-            // Коррекция, когда элемент сдвигается вниз
-            if (newIndex > oldIndex) newIndex -= 1;
-
-            // Находим индекс в оригинальном списке
-            final item = filteredWords.removeAt(oldIndex);
-            filteredWords.insert(newIndex, item);
-
-            // Переносим изменения в основной список words
-            words.clear();
-            words.addAll(filteredWords);
-            saveDict(words);
-          });
-        },
-        itemBuilder: (context, i) {
-          final word = filteredWords[i];
-          return ListTile(
-            key: ValueKey(word), // Обязательно для ReorderableListView
-            title: Text(word["eng"] ?? ""),
-            subtitle: Text(word["rus"] ?? ""),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => _addOrEditWord(index: words.indexOf(word)),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: () => _deleteWord(words.indexOf(word)),
-                ),
-              ],
+      body: Column(
+        children: [
+          Expanded(
+            child: ReorderableListView.builder(
+              itemCount: filteredWords.length,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final item = filteredWords.removeAt(oldIndex);
+                  filteredWords.insert(newIndex, item);
+                  words.clear();
+                  words.addAll(filteredWords);
+                  saveDict(words);
+                });
+              },
+              itemBuilder: (context, i) {
+                final word = filteredWords[i];
+                return ListTile(
+                  key: ValueKey(word),
+                  title: Text(word["eng"] ?? ""),
+                  subtitle: Text(word["rus"] ?? ""),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () =>
+                            _addOrEditWord(index: words.indexOf(word)),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () => _deleteWord(words.indexOf(word)),
+                      ),
+                    ],
+                  ),
+                );
+              },
             ),
-          );
-        },
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.chat),
+              label: const Text("Test GPT"),
+              onPressed: () => showGPTTestDialog(context),
+            ),
+          ),
+        ],
       ),
-
-      floatingActionButton: ElevatedButton.icon(
-        onPressed: () => _addOrEditWord(),
+      floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: const Text("Add Word"),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
+        onPressed: () => _addOrEditWord(),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
