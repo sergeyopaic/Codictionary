@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart' show rootBundle; // сверху файла
 
 // ====== Конфиг ======
 const String API_KEY = "3d24a792-7f04-4396-9446-528aa5d638b2:fx";
@@ -12,23 +13,73 @@ const String TRANSLATE_URL = "https://api-free.deepl.com/v2/translate";
 // ====== Утилиты ======
 Future<File> _getDictFile() async {
   final dir = await getApplicationDocumentsDirectory();
-  return File('${dir.path}/dictionary.json');
+  final file = File('${dir.path}/dictionary.json');
+  // Для отладки полезно напечатать путь
+  debugPrint('Dictionary file path: ${file.path}');
+  return file;
 }
+
+const List<Map<String, String>> _defaultWords = [
+  {"eng": "apple", "rus": "яблоко"},
+  {"eng": "dog", "rus": "собака"},
+  {"eng": "house", "rus": "дом"},
+];
 
 Future<List<Map<String, String>>> loadDict() async {
   try {
     final file = await _getDictFile();
     if (await file.exists()) {
-      final data = jsonDecode(await file.readAsString());
-      return List<Map<String, String>>.from(data);
+      final text = await file.readAsString();
+      if (text.trim().isEmpty) {
+        debugPrint('Dict file empty -> returning default');
+        await saveDict(_defaultWords); // перезапишем дефолтом
+        return List.from(_defaultWords);
+      }
+      final raw = jsonDecode(text);
+      if (raw is List) {
+        // конвертация каждого элемента в Map<String,String>
+        final list = raw.map<Map<String, String>>((e) {
+          if (e is Map) return Map<String, String>.from(e);
+          return <String, String>{};
+        }).toList();
+        return list;
+      }
+      debugPrint('Dict file JSON not a list -> using default');
+    } else {
+      // Файла нет — попробуем взять bundled asset (если он есть)
+      try {
+        final asset = await rootBundle.loadString('assets/dictionary.json');
+        final raw = jsonDecode(asset);
+        final list = (raw as List)
+            .map<Map<String, String>>((e) => Map<String, String>.from(e))
+            .toList();
+        // Сохраним копию в documents, чтобы далее использовать её
+        await saveDict(list);
+        debugPrint('Copied initial dictionary from assets into documents');
+        return list;
+      } catch (e) {
+        debugPrint('No asset dictionary or failed to load it: $e');
+        // создадим файл с дефолтом
+        await saveDict(_defaultWords);
+        return List.from(_defaultWords);
+      }
     }
-  } catch (_) {}
-  return [];
+  } catch (e, st) {
+    debugPrint('loadDict error: $e\n$st');
+  }
+  // fallback
+  return List.from(_defaultWords);
 }
 
 Future<void> saveDict(List<Map<String, String>> dict) async {
-  final file = await _getDictFile();
-  await file.writeAsString(jsonEncode(dict));
+  try {
+    final file = await _getDictFile();
+    final text = jsonEncode(dict);
+    await file.writeAsString(text);
+    debugPrint('Saved dictionary (${dict.length} entries) to ${file.path}');
+  } catch (e, st) {
+    debugPrint('saveDict error: $e\n$st');
+  }
 }
 
 Future<String> translateWord(String word) async {
@@ -46,7 +97,6 @@ Future<String> translateWord(String word) async {
   return data["translations"][0]["text"];
 }
 
-
 // ====== Приложение ======
 void main() {
   runApp(const MyApp());
@@ -55,11 +105,8 @@ void main() {
 void showAddedWordPopup(BuildContext context) {
   final overlay = Overlay.of(context);
   final entry = OverlayEntry(
-    builder: (context) => Positioned(
-      right: 16,
-      bottom: 80,
-      child: _AnimatedPopup(),
-    ),
+    builder: (context) =>
+        Positioned(right: 16, bottom: 80, child: _AnimatedPopup()),
   );
 
   overlay.insert(entry);
@@ -95,12 +142,14 @@ class _AnimatedPopupState extends State<_AnimatedPopup>
       opacity: _fade,
       child: Stack(
         alignment: Alignment.center,
+        clipBehavior: Clip.none, // чтобы gif мог вылезать за пределы
         children: [
-          // Карточка "Word added!"
+          // Сначала карточка
           Card(
             color: Colors.green.shade300,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
@@ -108,23 +157,16 @@ class _AnimatedPopupState extends State<_AnimatedPopup>
                 children: const [
                   Icon(Icons.check, color: Colors.white),
                   SizedBox(width: 8),
-                  Text(
-                    "Word added!",
-                    style: TextStyle(color: Colors.white),
-                  ),
+                  Text("Word added!", style: TextStyle(color: Colors.white)),
                 ],
               ),
             ),
           ),
 
-          // Гифка сверху карточки
+          // Потом гифка (поверх карточки)
           Positioned(
-            top: -60, // немного приподняли
-            child: Image.asset(
-              "lib/media/clap_up.gif",
-              width: 80,
-              height: 80,
-            ),
+            top: -60,
+            child: Image.asset("lib/media/clap_up.gif", width: 80, height: 80),
           ),
         ],
       ),
@@ -137,7 +179,6 @@ class _AnimatedPopupState extends State<_AnimatedPopup>
     super.dispose();
   }
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -180,7 +221,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     final dict = await loadDict();
     setState(() {
       words = dict;
-      _filterWords();
+      filteredWords = List.from(words);
     });
   }
 
@@ -205,9 +246,13 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
 
   Future<void> _addOrEditWord({int? index}) async {
     Timer? debounceTimer;
-    final engController = TextEditingController(text: index != null ? words[index]["eng"] : '');
-    final rusController = TextEditingController(text: index != null ? words[index]["rus"] : '');
-    
+    final engController = TextEditingController(
+      text: index != null ? words[index]["eng"] : '',
+    );
+    final rusController = TextEditingController(
+      text: index != null ? words[index]["rus"] : '',
+    );
+    final engFocus = FocusNode();
     bool autoTranslate = true;
 
     Future<void> save() async {
@@ -232,56 +277,58 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       Navigator.pop(context);
       showAddedWordPopup(context);
     }
-    
+
     await showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: Text(index == null ? "Add Word" : "Edit Word"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: engController,
-              decoration: const InputDecoration(labelText: "English"),
-              textInputAction: TextInputAction.next,
-              onChanged: (text) {
-                if (!autoTranslate || text.trim().isEmpty) return;
-
-                // отменяем предыдущий таймер
-                debounceTimer?.cancel();
-
-                // создаём новый таймер на 1.5 секунды
-                debounceTimer = Timer(const Duration(milliseconds: 500), () async {
-                  try {
-                    rusController.text = await translateWord(text.trim());
-                  } catch (e) {
-                    // Можно проигнорировать ошибку или показать SnackBar
-                  }
-                });
-              },
-              onSubmitted: (_) => FocusScope.of(context).nextFocus(),
-            ),
-            TextField(
-              controller: rusController,
-              decoration: const InputDecoration(labelText: "Russian"),
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => save(), 
-            ),
-            Row(
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(index == null ? "Add Word" : "Edit Word"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Checkbox(
-                  value: autoTranslate,
-                  onChanged: (v) => setState(() => autoTranslate = v ?? true),
+                TextField(
+                  controller: engController,
+                  focusNode: engFocus,
+                  decoration: const InputDecoration(labelText: "English"),
+                  autofocus: true,
+                  onChanged: (text) {
+                    if (!autoTranslate || text.trim().isEmpty) return;
+                    debounceTimer?.cancel();
+                    debounceTimer = Timer(
+                      const Duration(milliseconds: 500),
+                      () async {
+                        rusController.text = await translateWord(text.trim());
+                      },
+                    );
+                  },
                 ),
-                const Text("Auto-translate")
+                TextField(
+                  controller: rusController,
+                  decoration: const InputDecoration(labelText: "Russian"),
+                ),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: autoTranslate,
+                      onChanged: (v) => setDialogState(() {
+                        autoTranslate = v ?? true;
+                      }),
+                    ),
+                    const Text("Auto-translate"),
+                  ],
+                ),
               ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
-          ElevatedButton(onPressed: save, child: const Text("Save")),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(onPressed: save, child: const Text("Save")),
+            ],
+          );
+        },
       ),
     );
   }
@@ -317,49 +364,57 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         ),
       ),
       body: ReorderableListView.builder(
-  itemCount: filteredWords.length,
-  onReorder: (oldIndex, newIndex) {
-    setState(() {
-      // Коррекция, когда элемент сдвигается вниз
-      if (newIndex > oldIndex) newIndex -= 1;
+        itemCount: filteredWords.length,
+        onReorder: (oldIndex, newIndex) {
+          setState(() {
+            // Коррекция, когда элемент сдвигается вниз
+            if (newIndex > oldIndex) newIndex -= 1;
 
-      // Находим индекс в оригинальном списке
-      final item = filteredWords.removeAt(oldIndex);
-      filteredWords.insert(newIndex, item);
+            // Находим индекс в оригинальном списке
+            final item = filteredWords.removeAt(oldIndex);
+            filteredWords.insert(newIndex, item);
 
-      // Переносим изменения в основной список words
-      words.clear();
-      words.addAll(filteredWords);
-      saveDict(words);
-    });
-  },
-  itemBuilder: (context, i) {
-    final word = filteredWords[i];
-    return ListTile(
-      key: ValueKey(word), // Обязательно для ReorderableListView
-      title: Text(word["eng"] ?? ""),
-      subtitle: Text(word["rus"] ?? ""),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _addOrEditWord(index: words.indexOf(word)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () => _deleteWord(words.indexOf(word)),
-          ),
-        ],
+            // Переносим изменения в основной список words
+            words.clear();
+            words.addAll(filteredWords);
+            saveDict(words);
+          });
+        },
+        itemBuilder: (context, i) {
+          final word = filteredWords[i];
+          return ListTile(
+            key: ValueKey(word), // Обязательно для ReorderableListView
+            title: Text(word["eng"] ?? ""),
+            subtitle: Text(word["rus"] ?? ""),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () => _addOrEditWord(index: words.indexOf(word)),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  onPressed: () => _deleteWord(words.indexOf(word)),
+                ),
+              ],
+            ),
+          );
+        },
       ),
-    );
-  },
-),
 
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: ElevatedButton.icon(
         onPressed: () => _addOrEditWord(),
-        child: const Icon(Icons.add),
+        icon: const Icon(Icons.add),
+        label: const Text("Add Word"),
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
