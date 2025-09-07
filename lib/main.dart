@@ -329,7 +329,7 @@ class CodeDictionaryTitle extends StatelessWidget {
   const CodeDictionaryTitle({
     super.key,
     this.text = 'Codictionary',
-    this.fontSize = 45.0, // размер шрифта в AppBar
+    this.fontSize = 90, // размер шрифта в AppBar
     this.strokeWidth = 3.0, // толщина обводки
     this.strokeColor = const Color(0xCC000000),
     this.fillColor = Colors.white, // цвет заливки текста
@@ -713,9 +713,10 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // если подключил шрифт в pubspec, передай fontFamily: 'CodictionaryCartoon'
+        toolbarHeight: 90,
+        centerTitle: true,
         title: const CodeDictionaryTitle(
-          fontSize: 65, // подгони под высоту AppBar
+          fontSize: 56, // подгони под высоту AppBar
           strokeWidth: 5, // «слегка мультяшно» — не переборщи
           fillColor: Color.fromARGB(
             255,
