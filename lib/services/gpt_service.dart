@@ -7,11 +7,7 @@ class GptService {
 
   static const _url = 'https://api.openai.com/v1/responses';
 
-  Future<String> explainWord(String eng) async {
-    final prompt =
-        'Приведи пример использования слова "$eng" на английском языке. '
-        'Дай русскоязычное описание длиной примерно 200 слов о том, как это слово переводится и где используется.';
-
+  Future<String> sendPrompt(String prompt) async {
     final resp = await http.post(
       Uri.parse(_url),
       headers: {
@@ -40,5 +36,12 @@ class GptService {
       if (p['text'] is String) return p['text'] as String;
     }
     return 'No text in response.';
+  }
+
+  Future<String> explainWord(String eng) async {
+    final prompt =
+        'Приведи пример использования слова "$eng" на английском языке. '
+        'Дай русскоязычное описание длиной примерно 200 слов о том, как это слово переводится и где используется.';
+    return sendPrompt(prompt);
   }
 }

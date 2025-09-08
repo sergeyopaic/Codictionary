@@ -1,64 +1,20 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:uuid/uuid.dart';
 
 import 'models/word.dart';
-import 'services/storage_service.dart';
 import 'services/gpt_service.dart';
+import 'services/storage_service.dart';
 import 'services/translate_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
-final apiKey = dotenv.env['OPENAI_API_KEY'];
-final deeplApiKey = dotenv.env['DEEPL_API_KEY'];
+late String? apiKey;
+late String? deeplApiKey;
 
-const String TRANSLATE_URL = "https://api-free.deepl.com/v2/translate";
-const String GPT5_MINI_URL = "https://api.openai.com/v1/responses";
-Future<String> askGPT5Mini(String prompt) async {
-  final resp = await http.post(
-    Uri.parse(GPT5_MINI_URL), // https://api.openai.com/v1/responses
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $apiKey",
-    },
-    body: jsonEncode({
-      "model": "gpt-4.1-mini", // не "gpt-5-mini"
-      "input": prompt,
-      "temperature": 1,
-      "max_output_tokens": 400, // можно 200–500
-    }),
-  );
-
-  if (resp.statusCode != 200) {
-    throw Exception("OpenAI API error: ${resp.statusCode} ${resp.body}");
-  }
-
-  final data = jsonDecode(resp.body);
-
-  // Response API: data['output'] — список сообщений, каждое содержит content[]
-  final output = data['output'] as List<dynamic>? ?? const [];
-  if (output.isEmpty) return "No output from model.";
-
-  final first =
-      output.first as Map<String, dynamic>?; // {id, type, role, content, ...}
-  final content = first?['content'] as List<dynamic>? ?? const [];
-
-  // Ищем text-часть (обычно type == 'output_text')
-  String? text;
-  for (final part in content) {
-    final p = part as Map<String, dynamic>;
-    if (p['text'] is String) {
-      text = p['text'] as String;
-      break;
-    }
-  }
-
-  return text ?? "No text in response.";
-}
+late final GptService gpt;
+late final TranslateService translate;
+late final StorageService storage;
 
 Future<void> showGPTTestDialog(BuildContext context) async {
   final TextEditingController promptController = TextEditingController();
@@ -76,35 +32,8 @@ Future<void> showGPTTestDialog(BuildContext context) async {
             setState(() => gptAnswer = "Loading...");
 
             try {
-              final resp = await http.post(
-                Uri.parse("https://api.openai.com/v1/responses"),
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": "Bearer $apiKey",
-                },
-                body: jsonEncode({
-                  "model": "gpt-4.1-mini",
-                  "input": prompt,
-                  "temperature": 1,
-                  "max_output_tokens": 500,
-                }),
-              );
-
-              if (resp.statusCode == 200) {
-                final data = jsonDecode(resp.body);
-                final output = data['output'] as List<dynamic>? ?? [];
-                final firstMessage = output.isNotEmpty ? output[0] : null;
-                final text = firstMessage != null
-                    ? (firstMessage['content'] as List<dynamic>)[0]['text']
-                          as String
-                    : "No content";
-
-                setState(() => gptAnswer = text);
-              } else {
-                setState(
-                  () => gptAnswer = "Error: ${resp.statusCode} ${resp.body}",
-                );
-              }
+              final text = await gpt.sendPrompt(prompt);
+              setState(() => gptAnswer = text);
             } catch (e) {
               setState(() => gptAnswer = "Exception: $e");
             }
@@ -142,92 +71,12 @@ Future<void> showGPTTestDialog(BuildContext context) async {
   );
 }
 
-// ====== Утилиты ======
-Future<File> _getDictFile() async {
-  final dir = await getApplicationDocumentsDirectory();
-  final file = File('${dir.path}/dictionary.json');
-  // Для отладки полезно напечатать путь
-  debugPrint('Dictionary file path: ${file.path}');
-  return file;
-}
-
-const List<Map<String, String>> _defaultWords = [
-  {"eng": "apple", "rus": "яблоко"},
-  {"eng": "dog", "rus": "собака"},
-  {"eng": "house", "rus": "дом"},
+// ====== Данные по умолчанию ======
+const List<Word> _defaultWords = [
+  Word(id: '1', eng: 'apple', rus: 'яблоко'),
+  Word(id: '2', eng: 'dog', rus: 'собака'),
+  Word(id: '3', eng: 'house', rus: 'дом'),
 ];
-
-Future<List<Map<String, String>>> loadDict() async {
-  try {
-    final file = await _getDictFile();
-    if (await file.exists()) {
-      final text = await file.readAsString();
-      if (text.trim().isEmpty) {
-        debugPrint('Dict file empty -> returning default');
-        await saveDict(_defaultWords); // перезапишем дефолтом
-        return List.from(_defaultWords);
-      }
-      final raw = jsonDecode(text);
-      if (raw is List) {
-        // конвертация каждого элемента в Map<String,String>
-        final list = raw.map<Map<String, String>>((e) {
-          if (e is Map) return Map<String, String>.from(e);
-          return <String, String>{};
-        }).toList();
-        return list;
-      }
-      debugPrint('Dict file JSON not a list -> using default');
-    } else {
-      // Файла нет — попробуем взять bundled asset (если он есть)
-      try {
-        final asset = await rootBundle.loadString('assets/dictionary.json');
-        final raw = jsonDecode(asset);
-        final list = (raw as List)
-            .map<Map<String, String>>((e) => Map<String, String>.from(e))
-            .toList();
-        // Сохраним копию в documents, чтобы далее использовать её
-        await saveDict(list);
-        debugPrint('Copied initial dictionary from assets into documents');
-        return list;
-      } catch (e) {
-        debugPrint('No asset dictionary or failed to load it: $e');
-        // создадим файл с дефолтом
-        await saveDict(_defaultWords);
-        return List.from(_defaultWords);
-      }
-    }
-  } catch (e, st) {
-    debugPrint('loadDict error: $e\n$st');
-  }
-  // fallback
-  return List.from(_defaultWords);
-}
-
-Future<void> saveDict(List<Map<String, String>> dict) async {
-  try {
-    final file = await _getDictFile();
-    final text = jsonEncode(dict);
-    await file.writeAsString(text);
-    debugPrint('Saved dictionary (${dict.length} entries) to ${file.path}');
-  } catch (e, st) {
-    debugPrint('saveDict error: $e\n$st');
-  }
-}
-
-Future<String> translateWord(String word) async {
-  final resp = await http.post(
-    Uri.parse(TRANSLATE_URL),
-    headers: {"Content-Type": "application/x-www-form-urlencoded"},
-    body: "auth_key=$deeplApiKey&text=$word&target_lang=RU",
-  );
-
-  if (resp.statusCode != 200) {
-    throw Exception("Translation failed: ${resp.body}");
-  }
-
-  final data = jsonDecode(resp.body);
-  return data["translations"][0]["text"];
-}
 
 // ====== Приложение ======
 Future<void> main() async {
@@ -236,6 +85,11 @@ Future<void> main() async {
 
   // загружаем переменные из .env
   await dotenv.load(fileName: ".env");
+  apiKey = dotenv.env['OPENAI_API_KEY'];
+  deeplApiKey = dotenv.env['DEEPL_API_KEY'];
+  storage = createStorageService();
+  gpt = GptService(apiKey ?? '');
+  translate = TranslateService(deeplApiKey ?? '');
 
   runApp(const MyApp());
 }
@@ -266,10 +120,6 @@ class _AnimatedPopupState extends State<_AnimatedPopup>
   @override
   void initState() {
     super.initState();
-    storage = StorageService();
-    gpt = GptService(apiKey ?? '');
-    translate = TranslateService(deeplApiKey ?? '');
-    _init();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
@@ -342,7 +192,7 @@ class CodeDictionaryTitle extends StatelessWidget {
     this.strokeWidth = 3.0, // толщина обводки
     this.strokeColor = const Color(0xCC000000),
     this.fillColor = Colors.white, // цвет заливки текста
-    this.imagePath = 'assets/images/mascot.png',
+    this.imagePath = 'assets/images/cody.png',
     this.gap = 8.0, // отступ между маскотом и текстом
     this.fontFamily, // 'CodictionaryCartoon' если добавил шрифт
   });
@@ -416,8 +266,8 @@ class DictionaryScreen extends StatefulWidget {
 }
 
 class _DictionaryScreenState extends State<DictionaryScreen> {
-  List<Map<String, String>> words = [];
-  List<Map<String, String>> filteredWords = [];
+  List<Word> words = [];
+  List<Word> filteredWords = [];
   final TextEditingController searchController = TextEditingController();
   String searchQuery = "";
 
@@ -435,9 +285,31 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   }
 
   Future<void> _loadWords() async {
-    final dict = await loadDict();
+    final loaded = await storage.loadWords();
+    if (loaded.isEmpty) {
+      words = List<Word>.from(_defaultWords);
+      await storage.saveWords(words);
+    } else {
+      // Ensure all words have unique, non-empty IDs to avoid GlobalKey conflicts
+      // in ReorderableListView.
+      final seen = <String>{};
+      final fixed = <Word>[];
+      for (final w in loaded) {
+        var id = w.id;
+        if (id.isEmpty || seen.contains(id)) {
+          id = const Uuid().v4();
+        }
+        seen.add(id);
+        fixed.add(Word(id: id, eng: w.eng, rus: w.rus, desc: w.desc));
+      }
+      words = fixed;
+      // Persist back if anything changed
+      if (fixed.length != loaded.length ||
+          !fixed.asMap().entries.every((e) => e.value.id == loaded[e.key].id)) {
+        await storage.saveWords(words);
+      }
+    }
     setState(() {
-      words = dict;
       filteredWords = List.from(words);
     });
   }
@@ -454,8 +326,8 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       filteredWords = List.from(words);
     } else {
       filteredWords = words.where((word) {
-        final eng = word["eng"]?.toLowerCase() ?? "";
-        final rus = word["rus"]?.toLowerCase() ?? "";
+        final eng = word.eng.toLowerCase();
+        final rus = word.rus.toLowerCase();
         return eng.contains(searchQuery) || rus.contains(searchQuery);
       }).toList();
     }
@@ -463,7 +335,6 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
 
   Future<void> _showWordExplanation(BuildContext context, int index) async {
     if (index < 0 || index >= words.length) {
-      // на всякий случай, если indexOf вернул -1
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Word not found.')));
@@ -471,7 +342,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     }
 
     String gptAnswer =
-        words[index]["desc"] ?? "Нет описания. Нажмите «Regenerate text».";
+        words[index].desc ?? "Нет описания. Нажмите «Regenerate text».";
 
     await showDialog(
       context: context,
@@ -481,17 +352,13 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
             Future<void> regenerate() async {
               setState(() => gptAnswer = "Loading...");
               try {
-                final eng = words[index]["eng"] ?? "";
-                final prompt =
-                    'Приведи пример использования слова "$eng" на английском языке. '
-                    'Дай русскоязычное описание длиной примерно 200 слов о том, как это слово переводится и где используется.';
-                final newText = await askGPT5Mini(prompt);
+                final eng = words[index].eng;
+                final newText = await gpt.explainWord(eng);
                 if (!context.mounted) return;
                 setState(() => gptAnswer = newText);
 
-                // обновляем и сохраняем
-                words[index]["desc"] = newText;
-                await saveDict(words);
+                words[index] = words[index].copyWith(desc: newText);
+                await storage.saveWords(words);
               } catch (e) {
                 if (!context.mounted) return;
                 setState(() => gptAnswer = "Ошибка: $e");
@@ -499,7 +366,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
             }
 
             return AlertDialog(
-              title: Text('Explanation for "${words[index]["eng"] ?? ""}"'),
+              title: Text('Explanation for "${words[index].eng}"'),
               content: SizedBox(
                 width: double.maxFinite,
                 child: Column(
@@ -548,16 +415,16 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     Timer? debounceTimer;
 
     final engController = TextEditingController(
-      text: index != null ? (words[index]["eng"] ?? '') : '',
+      text: index != null ? words[index].eng : '',
     );
     final rusController = TextEditingController(
-      text: index != null ? (words[index]["rus"] ?? '') : '',
+      text: index != null ? words[index].rus : '',
     );
 
     final engFocus = FocusNode();
     final rusFocus = FocusNode();
 
-    bool autoTranslate = true;
+    bool autoTranslate = !kIsWeb; // Disable by default on web due to CORS
     bool isSaving = false;
 
     // <-- объявляем заранее, чтобы замыкания могли ссылаться
@@ -571,9 +438,8 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       // автоперевод при пустом RUS
       if (autoTranslate && rus.isEmpty) {
         try {
-          rus = await translateWord(eng);
+          rus = await translate.translateToRu(eng);
         } catch (_) {
-          // оставляем как ввёл пользователь
           rus = rusController.text.trim();
         }
       }
@@ -582,37 +448,34 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       _setDialogState?.call(() => isSaving = true);
 
       // генерируем описание ТОЛЬКО при добавлении
-      String? desc = index != null ? (words[index]["desc"]) : null;
+      String? desc = index != null ? words[index].desc : null;
       if (index == null) {
-        final prompt =
-            'Приведи пример использования слова "$eng" на английском языке. '
-            'Дай русскоязычное описание длиной примерно 200 слов о том, как это слово переводится и где используется.';
         try {
-          desc = await askGPT5Mini(prompt);
+          desc = await gpt.explainWord(eng);
         } catch (e) {
           desc = 'Ошибка при генерации описания: $e';
         }
       }
 
-      final newEntry = <String, String>{
-        "eng": eng,
-        "rus": rus,
-        if (desc != null) "desc": desc,
-      };
+      final newWord = Word(
+        id: index != null ? words[index].id : const Uuid().v4(),
+        eng: eng,
+        rus: rus,
+        desc: desc,
+      );
 
       if (!mounted) return;
 
       setState(() {
         if (index == null) {
-          words.add(newEntry);
+          words.add(newWord);
         } else {
-          words[index] =
-              newEntry; // desc оставляем как было, если редактирование
+          words[index] = newWord;
         }
         _filterWords();
       });
 
-      await saveDict(words);
+      await storage.saveWords(words);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -647,7 +510,9 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                       const Duration(milliseconds: 500),
                       () async {
                         try {
-                          rusController.text = await translateWord(text.trim());
+                          rusController.text = await translate.translateToRu(
+                            text.trim(),
+                          );
                         } catch (_) {
                           // игнорируем ошибку автоперевода
                         }
@@ -715,7 +580,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       words.removeAt(index);
       _filterWords();
     });
-    await saveDict(words);
+    await storage.saveWords(words);
   }
 
   @override
@@ -748,17 +613,16 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   if (newIndex > oldIndex) newIndex -= 1;
                   final item = filteredWords.removeAt(oldIndex);
                   filteredWords.insert(newIndex, item);
-                  words.clear();
-                  words.addAll(filteredWords);
-                  saveDict(words);
+                  words = List.from(filteredWords);
                 });
+                storage.saveWords(words);
               },
               itemBuilder: (context, i) {
                 final word = filteredWords[i];
                 return ListTile(
-                  key: ValueKey(word),
-                  title: Text(word["eng"] ?? ""),
-                  subtitle: Text(word["rus"] ?? ""),
+                  key: ValueKey(word.id),
+                  title: Text(word.eng),
+                  subtitle: Text(word.rus),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

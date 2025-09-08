@@ -1,3 +1,5 @@
+import 'package:uuid/uuid.dart';
+
 class Word {
   final String id;
   final String eng;
@@ -18,12 +20,16 @@ class Word {
     desc: desc ?? this.desc,
   );
 
-  factory Word.fromMap(Map<String, dynamic> m) => Word(
-    id: (m['id'] ?? '') as String,
-    eng: (m['eng'] ?? '') as String,
-    rus: (m['rus'] ?? '') as String,
-    desc: m['desc'] as String?,
-  );
+  factory Word.fromMap(Map<String, dynamic> m) {
+    final rawId = m['id'];
+    final id = (rawId is String && rawId.isNotEmpty)
+        ? rawId
+        : const Uuid().v4();
+    final eng = (m['eng'] ?? '') as String;
+    final rus = (m['rus'] ?? '') as String;
+    final desc = m['desc'] as String?;
+    return Word(id: id, eng: eng, rus: rus, desc: desc);
+  }
 
   Map<String, dynamic> toMap() => {
     'id': id,

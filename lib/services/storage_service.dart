@@ -1,26 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import '../models/word.dart';
+export 'storage/storage_interface.dart';
+import 'package:codictionary/services/storage/storage_interface.dart';
 
-class StorageService {
-  Future<File> _getDictFile() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/dictionary.json');
-  }
+import 'storage/storage_io.dart'
+    if (dart.library.html) 'storage/storage_web.dart'
+    as platform;
 
-  Future<List<Word>> loadWords() async {
-    final file = await _getDictFile();
-    if (!await file.exists()) return [];
-    final raw = await file.readAsString();
-    if (raw.trim().isEmpty) return [];
-    final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-    return list.map(Word.fromMap).toList();
-  }
-
-  Future<void> saveWords(List<Word> words) async {
-    final file = await _getDictFile();
-    final jsonList = words.map((w) => w.toMap()).toList();
-    await file.writeAsString(jsonEncode(jsonList));
-  }
-}
+StorageService createStorageService() => platform.createStorageService();
