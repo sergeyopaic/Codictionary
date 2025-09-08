@@ -1,9 +1,6 @@
 name: codictionary
 description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
-
+publish_to: 'none'
 
 version: 1.0.0+1
 
@@ -13,20 +10,22 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  get_it: ^8.2.0
   http: ^1.1.0
   path_provider: ^2.0.17
   flutter_dotenv: ^5.1.0
   flutter_launcher_icons: ^0.13.1
-  uuid: ^4.4.0 
+  uuid: ^4.4.0
   reorderable_grid_view: ^2.2.8
   reorderable_grid: ^1.0.12
   msix: ^3.16.12
-  
+  cupertino_icons: ^1.0.8
+
 msix_config:
   display_name: Codictionary
   publisher_display_name: Sergey Ivanov
   identity_name: com.sergey.codictionary
-  logo_path: windows\runner\resources\app_icon.ico
+  logo_path: windows\\runner\\resources\\app_icon.ico
   start_menu: true
   shortcut: true
 
@@ -35,17 +34,12 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
 
-
 flutter_icons:
   android: true
   ios: true
   windows:
     generate: true
   image_path: "lib/media/ffc2b8b3-e3ac-4cac-8e3a-1b6915d3630f.png"
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
 
 flutter:
   uses-material-design: true
@@ -59,3 +53,4 @@ flutter:
     - lib/media/clap_up.gif
     - lib/media/CODY.png
     - lib/media/ffc2b8b3-e3ac-4cac-8e3a-1b6915d3630f.png
+

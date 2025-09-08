@@ -1,0 +1,137 @@
+                        Expanded(child: Text(desc ?? 'No description. Tap "Regenerate text".')),
+                        IconButton(tooltip: 'Regenerate text', icon: const Icon(Icons.refresh), onPressed: generateDescription),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+                ElevatedButton(
+                  onPressed: () async {
+                    final eng = engController.text.trim();
+                    final rus = rusController.text.trim();
+                    if (eng.isEmpty || rus.isEmpty) return;
+                    if (isEdit) {
+                      final updated = words[index].copyWith(eng: eng, rus: rus, desc: desc);
+                      setState(() => words[index] = updated);
+                    } else {
+                      final newWord = Word(id: const Uuid().v4(), eng: eng, rus: rus, desc: desc);
+                      setState(() => words.add(newWord));
+                    }
+                    await widget.storage.saveWords(words);
+                    if (context.mounted) return;
+                    Navigator.of(context).pop();
+                  },
+                  child: Text(isEdit ? 'Save' : 'Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteWord(int index) async {
+    if (index < 0 || index >= words.length) return;
+    final word = words[index];
+    setState(() => words.removeAt(index));
+    await widget.storage.saveWords(words);
+    if (mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted ${word.eng}')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 90,
+        centerTitle: true,
+        title: const CodeDictionaryTitle(
+          fontSize: 56,
+          strokeWidth: 5,
+          fillColor: Color.fromARGB(255, 231, 255, 223),
+          strokeColor: Color(0xCC000000),
+          fontFamily: 'CodictionaryCartoon',
+          imagePath: 'lib/media/CODY.png',
+        ),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              controller: searchController,
+              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search...'),
+            ),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final columns = width.isFinite ? (width / 220).floor().clamp(1, 6) : 2;
+                return ReorderableGridView.builder(
+                  itemCount: filteredWords.length,
+                  onReorder: (oldIndex, newIndex) {
+                    setState(() {
+                      final item = filteredWords.removeAt(oldIndex);
+                      filteredWords.insert(newIndex, item);
+                      words = List<Word>.from(filteredWords);
+                    });
+                    widget.storage.saveWords(words);
+                  },
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.6,
+                  ),
+                  itemBuilder: (context, i) {
+                    final word = filteredWords[i];
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey(word.id),
+                      index: i,
+                      child: Card(
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(word.eng, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                              const SizedBox(height: 6),
+                              Text(word.rus, style: const TextStyle(fontSize: 14), maxLines: 2, overflow: TextOverflow.ellipsis),
+                              const Spacer(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Explain',
+                                    icon: const Icon(Icons.remove_red_eye),
+                                    onPressed: () { final idx = words.indexOf(word); if (idx >= 0) _showWordExplanation(context, idx); },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Edit',
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () { final idx = words.indexOf(word); if (idx >= 0) _addOrEditWord(index: idx); },
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete',
+                                    icon: const Icon(Icons.delete),
+                                    onPressed: () { final idx = words.indexOf(word); if (idx >= 0) _deleteWord(idx); },
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),

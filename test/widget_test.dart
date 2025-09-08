@@ -9,22 +9,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/main.dart';
+import 'package:codictionary/models/word.dart';
+import 'package:codictionary/services/storage/storage_interface.dart';
+import 'package:codictionary/services/gpt_service.dart';
+import 'package:codictionary/services/translate_service.dart';
+
+class _MemoryStorageService implements StorageService {
+  List<Word> _words = [];
+  @override
+  Future<List<Word>> loadWords() async => _words;
+  @override
+  Future<void> saveWords(List<Word> words) async {
+    _words = List.of(words);
+  }
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('App builds and shows Add Word button', (
+    WidgetTester tester,
+  ) async {
+    final storage = _MemoryStorageService();
+    final defaults = const [Word(id: '1', eng: 'apple', rus: 'яблоко')];
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MyApp(
+        gpt: GptService(''),
+        translate: TranslateService(''),
+        storage: storage,
+        defaultWords: defaults,
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Expect the Add Word FAB to be present
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.text('Add Word'), findsOneWidget);
   });
 }
