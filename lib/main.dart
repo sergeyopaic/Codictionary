@@ -6,11 +6,16 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:uuid/uuid.dart';
+
+import 'models/word.dart';
+import 'services/storage_service.dart';
+import 'services/gpt_service.dart';
+import 'services/translate_service.dart';
 
 final apiKey = dotenv.env['OPENAI_API_KEY'];
+final deeplApiKey = dotenv.env['DEEPL_API_KEY'];
 
-// ====== Конфиг ======
-const String API_KEY = "3d24a792-7f04-4396-9446-528aa5d638b2:fx";
 const String TRANSLATE_URL = "https://api-free.deepl.com/v2/translate";
 const String GPT5_MINI_URL = "https://api.openai.com/v1/responses";
 Future<String> askGPT5Mini(String prompt) async {
@@ -213,7 +218,7 @@ Future<String> translateWord(String word) async {
   final resp = await http.post(
     Uri.parse(TRANSLATE_URL),
     headers: {"Content-Type": "application/x-www-form-urlencoded"},
-    body: "auth_key=$API_KEY&text=$word&target_lang=RU",
+    body: "auth_key=$deeplApiKey&text=$word&target_lang=RU",
   );
 
   if (resp.statusCode != 200) {
@@ -261,6 +266,10 @@ class _AnimatedPopupState extends State<_AnimatedPopup>
   @override
   void initState() {
     super.initState();
+    storage = StorageService();
+    gpt = GptService(apiKey ?? '');
+    translate = TranslateService(deeplApiKey ?? '');
+    _init();
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
