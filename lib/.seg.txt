@@ -1,0 +1,65 @@
+                  itemBuilder: (context, i) {
+                    final word = filteredWords[i];
+                    return ReorderableDelayedDragStartListener(
+                      index: i,
+                      child: Card(
+                        key: ValueKey(word.id),
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                word.eng,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            const SizedBox(height: 6),
+                            Text(
+                              word.rus,
+                              style: const TextStyle(fontSize: 14),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const Spacer(),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Explain',
+                                  icon: const Icon(Icons.remove_red_eye),
+                                  onPressed: () => _showWordExplanation(
+                                    context,
+                                    words.indexOf(word),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Edit',
+                                  icon: const Icon(Icons.edit),
+                                  onPressed: () => _addOrEditWord(
+                                    index: words.indexOf(word),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Delete',
+                                  icon: const Icon(Icons.delete),
+                                  onPressed: () =>
+                                      _deleteWord(words.indexOf(word)),
+                                ),
+                              ],
+                            ),
+                          ],
+                      ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(

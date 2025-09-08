@@ -8,6 +8,7 @@ import 'services/gpt_service.dart';
 import 'services/storage_service.dart';
 import 'services/translate_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
 late String? apiKey;
 late String? deeplApiKey;
@@ -95,15 +96,19 @@ Future<void> main() async {
 }
 
 void showAddedWordPopup(BuildContext context) {
-  final overlay = Overlay.of(context);
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
   final entry = OverlayEntry(
     builder: (context) =>
         Positioned(right: 16, bottom: 80, child: _AnimatedPopup()),
   );
-
-  overlay.insert(entry);
-  Future.delayed(const Duration(seconds: 2), () {
-    entry.remove();
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    try {
+      overlay.insert(entry);
+      Future.delayed(const Duration(seconds: 2), () {
+        entry.remove();
+      });
+    } catch (_) {}
   });
 }
 
@@ -606,42 +611,89 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ReorderableListView.builder(
-              itemCount: filteredWords.length,
-              onReorder: (oldIndex, newIndex) {
-                setState(() {
-                  if (newIndex > oldIndex) newIndex -= 1;
-                  final item = filteredWords.removeAt(oldIndex);
-                  filteredWords.insert(newIndex, item);
-                  words = List.from(filteredWords);
-                });
-                storage.saveWords(words);
-              },
-              itemBuilder: (context, i) {
-                final word = filteredWords[i];
-                return ListTile(
-                  key: ValueKey(word.id),
-                  title: Text(word.eng),
-                  subtitle: Text(word.rus),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove_red_eye),
-                        onPressed: () =>
-                            _showWordExplanation(context, words.indexOf(word)),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () =>
-                            _addOrEditWord(index: words.indexOf(word)),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete),
-                        onPressed: () => _deleteWord(words.indexOf(word)),
-                      ),
-                    ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                final columns = width.isFinite
+                    ? (width / 220).floor().clamp(1, 6)
+                    : 2;
+                return ReorderableGridView.builder(
+                  itemCount: filteredWords.length,
+                  onReorder: (oldIndex, newIndex) {
+                    setState(() {
+                      final item = filteredWords.removeAt(oldIndex);
+                      filteredWords.insert(newIndex, item);
+                      words = List<Word>.from(filteredWords);
+                    });
+                    storage.saveWords(words);
+                  },
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.6,
                   ),
+                  itemBuilder: (context, i) {
+                    final word = filteredWords[i];
+                    return ReorderableDelayedDragStartListener(
+                      key: ValueKey(word.id),
+                      index: i,
+                      child: Card(
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                word.eng,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                word.rus,
+                                style: const TextStyle(fontSize: 14),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const Spacer(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  IconButton(
+                                    tooltip: 'Explain',
+                                    icon: const Icon(Icons.remove_red_eye),
+                                    onPressed: () => _showWordExplanation(
+                                      context,
+                                      words.indexOf(word),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Edit',
+                                    icon: const Icon(Icons.edit),
+                                    onPressed: () => _addOrEditWord(
+                                      index: words.indexOf(word),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete',
+                                    icon: const Icon(Icons.delete),
+                                    onPressed: () =>
+                                        _deleteWord(words.indexOf(word)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 );
               },
             ),
