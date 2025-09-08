@@ -20,8 +20,15 @@ dependencies:
   uuid: ^4.4.0 
   reorderable_grid_view: ^2.2.8
   reorderable_grid: ^1.0.12
+  msix: ^3.16.12
   
-
+msix_config:
+  display_name: Codictionary
+  publisher_display_name: Sergey Ivanov
+  identity_name: com.sergey.codictionary
+  logo_path: windows\runner\resources\app_icon.ico
+  start_menu: true
+  shortcut: true
 
 dev_dependencies:
   flutter_test:
