@@ -38,6 +38,91 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
 
   int _indexInWordsById(String id) => words.indexWhere((w) => w.id == id);
 
+  Future<bool> _confirmDeleteDialog(
+    BuildContext context,
+    String wordEng,
+  ) async {
+    final theme = Theme.of(context);
+    return (await showDialog<bool>(
+          context: context,
+          barrierDismissible: true,
+          builder: (context) {
+            return AlertDialog(
+              contentPadding: const EdgeInsets.fromLTRB(
+                16,
+                16,
+                16,
+                16,
+              ), // ← равные отступы
+              actionsPadding: const EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                16,
+              ), // ← кнопкам тоже боковые + нижний
+              content: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment
+                      .stretch, // ← растягиваем детей по высоте контента
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 84,
+                      // гарантируем, что изображение займет всю высоту контентной области
+                      child: FittedBox(
+                        fit: BoxFit.contain, // или BoxFit.fitHeight
+                        child: Image.asset(
+                          'lib/media/delete.png',
+                          filterQuality: FilterQuality.high,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Delete this word?',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '“$wordEng” will be removed from your dictionary.',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(context, rootNavigator: true).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton.icon(
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Delete'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: theme.colorScheme.error,
+                    foregroundColor: theme.colorScheme.onError,
+                  ),
+                  onPressed: () =>
+                      Navigator.of(context, rootNavigator: true).pop(true),
+                ),
+              ],
+            );
+          },
+        )) ??
+        false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -461,9 +546,14 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                       final idx = _indexInWordsById(word.id);
                                       if (idx >= 0) _addOrEditWord(index: idx);
                                     },
-                                    onDelete: () {
+                                    onDelete: () async {
                                       final idx = _indexInWordsById(word.id);
-                                      if (idx >= 0) _deleteWord(idx);
+                                      if (idx < 0) return;
+                                      final ok = await _confirmDeleteDialog(
+                                        context,
+                                        word.eng,
+                                      );
+                                      if (ok) _deleteWord(idx);
                                     },
                                   ),
                                 ),

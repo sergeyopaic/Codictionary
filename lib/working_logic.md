@@ -16,7 +16,6 @@ final _uuid = const Uuid();
 final apiKey = dotenv.env['OPENAI_API_KEY'];
 
 // ====== Конфиг ======
-const String API_KEY = "3d24a792-7f04-4396-9446-528aa5d638b2:fx";
 const String TRANSLATE_URL = "https://api-free.deepl.com/v2/translate";
 const String GPT5_MINI_URL = "https://api.openai.com/v1/responses";
 // Константы для размера карточки — «фиксированная и пропорциональная»

@@ -16,9 +16,9 @@ late final TranslateService translate;
 late final StorageService storage;
 
 const List<Word> _defaultWords = [
-  Word(id: '1', eng: 'apple', rus: '??????'),
-  Word(id: '2', eng: 'dog', rus: '??????'),
-  Word(id: '3', eng: 'house', rus: '???'),
+  Word(id: '1', eng: 'apple', rus: 'яблоко'),
+  Word(id: '2', eng: 'dog', rus: 'собака'),
+  Word(id: '3', eng: 'house', rus: 'дом'),
 ];
 
 Future<void> main() async {
