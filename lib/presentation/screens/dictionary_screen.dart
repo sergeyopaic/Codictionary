@@ -8,7 +8,10 @@ import '../../services/translate_service.dart';
 import '../../services/storage_service.dart';
 import '../dialogs/gpt_test_dialog.dart';
 import '../widgets/code_dictionary_title.dart';
+import '../widgets/word_card_menu.dart';
+import '../widgets/added_word_popup.dart';
 
+/// Main screen showing the dictionary grid and handling add/edit/delete.
 class DictionaryScreen extends StatefulWidget {
   final GptService gpt;
   final TranslateService translate;
@@ -25,11 +28,15 @@ class DictionaryScreen extends StatefulWidget {
   State<DictionaryScreen> createState() => _DictionaryScreenState();
 }
 
+/// State for [DictionaryScreen]; manages words, filtering, and actions.
 class _DictionaryScreenState extends State<DictionaryScreen> {
   List<Word> words = [];
   List<Word> filteredWords = [];
   final TextEditingController searchController = TextEditingController();
   String searchQuery = '';
+  final Set<String> _removing = <String>{};
+
+  int _indexInWordsById(String id) => words.indexWhere((w) => w.id == id);
 
   @override
   void initState() {
@@ -44,6 +51,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     super.dispose();
   }
 
+  /// Loads words from storage, fixing duplicate/empty IDs, and seeds defaults.
   Future<void> _loadWords() async {
     final loaded = await widget.storage.loadWords();
     if (loaded.isEmpty) {
@@ -75,6 +83,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     setState(() => filteredWords = List.from(words));
   }
 
+  /// Reacts to changes in the search field and updates the filtered list.
   void _onSearchChanged() {
     setState(() {
       searchQuery = searchController.text.trim().toLowerCase();
@@ -82,6 +91,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     });
   }
 
+  /// Applies current [searchQuery] to [words] and updates [filteredWords].
   void _filterWords() {
     if (searchQuery.isEmpty) {
       filteredWords = List.from(words);
@@ -96,6 +106,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     }
   }
 
+  /// Opens a dialog with extended info (GPT) for the word at [index].
   Future<void> _showWordExplanation(BuildContext context, int index) async {
     if (index < 0 || index >= words.length) return;
     String gptAnswer = words[index].desc ?? 'Waiting for response...';
@@ -169,7 +180,10 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     );
   }
 
+  /// Opens Add/Edit dialog. When [index] is null, adds; otherwise edits.
   Future<void> _addOrEditWord({int? index}) async {
+    // Adapted from working_logic.md: auto-translate, Enter-to-save, and saving state
+    Timer? debounceTimer;
     final bool isEdit = index != null;
     final engController = TextEditingController(
       text: isEdit ? words[index].eng : '',
@@ -177,119 +191,178 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     final rusController = TextEditingController(
       text: isEdit ? words[index].rus : '',
     );
+    final engFocus = FocusNode();
+    final rusFocus = FocusNode();
+    bool autoTranslate = true;
+    bool isSaving = false;
     String? desc = isEdit ? words[index].desc : null;
 
-    await showDialog(
+    Future<void> save(StateSetter setDialogState) async {
+      final eng = engController.text.trim();
+      String rus = rusController.text.trim();
+      if (eng.isEmpty) return;
+
+      if (autoTranslate && rus.isEmpty) {
+        try {
+          rus = await widget.translate.translateToRu(eng);
+        } catch (_) {
+          rus = rusController.text.trim();
+        }
+      }
+
+      setDialogState(() => isSaving = true);
+
+      if (!isEdit) {
+        try {
+          desc = await widget.gpt.explainWord(eng);
+        } catch (e) {
+          desc = 'Error generating description: $e';
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        if (isEdit) {
+          words[index] = words[index].copyWith(eng: eng, rus: rus, desc: desc);
+        } else {
+          words.add(
+            Word(id: const Uuid().v4(), eng: eng, rus: rus, desc: desc),
+          );
+        }
+        _filterWords();
+      });
+      await widget.storage.saveWords(words);
+      if (!mounted) return;
+    }
+
+    final result = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> autoTranslateIfNeeded() async {
-              final eng = engController.text.trim();
-              if (rusController.text.trim().isEmpty && eng.isNotEmpty) {
-                try {
-                  final translated = await widget.translate.translateToRu(eng);
-                  if (!context.mounted) return;
-                  setDialogState(() => rusController.text = translated);
-                } catch (_) {}
-              }
-            }
-
-            Future<void> generateDescription() async {
-              setDialogState(() => desc = 'Loading...');
-              try {
-                final eng = engController.text.trim();
-                final text = await widget.gpt.explainWord(eng);
-                if (!context.mounted) return;
-                setDialogState(() => desc = text);
-              } catch (e) {
-                if (!context.mounted) return;
-                setDialogState(() => desc = 'Error generating description: $e');
-              }
-            }
-
-            return AlertDialog(
-              title: Text(isEdit ? 'Edit Word' : 'Add Word'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+      barrierDismissible: true,
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Text(isEdit ? 'Edit Word' : 'Add Word'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: engController,
+                  focusNode: engFocus,
+                  autofocus: true,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(labelText: 'English'),
+                  enabled: !isSaving,
+                  onSubmitted: (_) async {
+                    await save(setDialogState);
+                    if (!context.mounted) return;
+                    Navigator.pop(context, isEdit ? null : true);
+                  },
+                  onChanged: (text) {
+                    if (!autoTranslate || text.trim().isEmpty) return;
+                    debounceTimer?.cancel();
+                    debounceTimer = Timer(
+                      const Duration(milliseconds: 500),
+                      () async {
+                        try {
+                          rusController.text = await widget.translate
+                              .translateToRu(text.trim());
+                        } catch (_) {}
+                      },
+                    );
+                  },
+                ),
+                TextField(
+                  controller: rusController,
+                  focusNode: rusFocus,
+                  decoration: const InputDecoration(labelText: 'Russian'),
+                  textInputAction: TextInputAction.done,
+                  enabled: !isSaving,
+                  onSubmitted: (_) async {
+                    await save(setDialogState);
+                    if (!context.mounted) return;
+                    Navigator.pop(context, isEdit ? null : true);
+                  },
+                ),
+                Row(
                   children: [
-                    TextField(
-                      controller: engController,
-                      decoration: const InputDecoration(labelText: 'ENG'),
-                      onChanged: (_) => autoTranslateIfNeeded(),
+                    Checkbox(
+                      value: autoTranslate,
+                      onChanged: isSaving
+                          ? null
+                          : (v) =>
+                                setDialogState(() => autoTranslate = v ?? true),
                     ),
-                    TextField(
-                      controller: rusController,
-                      decoration: const InputDecoration(labelText: 'RUS'),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            desc ?? 'No description. Tap "Regenerate text".',
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Regenerate text',
-                          icon: const Icon(Icons.refresh),
-                          onPressed: generateDescription,
-                        ),
-                      ],
-                    ),
+                    const Text('Auto-translate'),
                   ],
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final eng = engController.text.trim();
-                    final rus = rusController.text.trim();
-                    if (eng.isEmpty || rus.isEmpty) return;
-                    if (isEdit) {
-                      final updated = words[index].copyWith(
-                        eng: eng,
-                        rus: rus,
-                        desc: desc,
-                      );
-                      setState(() => words[index] = updated);
-                    } else {
-                      final newWord = Word(
-                        id: const Uuid().v4(),
-                        eng: eng,
-                        rus: rus,
-                        desc: desc,
-                      );
-                      setState(() => words.add(newWord));
-                    }
-                    await widget.storage.saveWords(words);
-                    if (!context.mounted) return;
-                    Navigator.of(context).pop();
-                  },
-                  child: Text(isEdit ? 'Save' : 'Add'),
-                ),
+                if (isSaving) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: const [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 10),
+                      Text('Generating & saving...'),
+                    ],
+                  ),
+                ],
               ],
-            );
-          },
-        );
-      },
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving
+                    ? null
+                    : () => Navigator.of(context, rootNavigator: true).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        await save(setDialogState);
+                        if (!isEdit) {
+                          if (!context.mounted) return;
+                          Navigator.of(context, rootNavigator: true).pop(true);
+                        } else {
+                          if (!context.mounted) return;
+                          Navigator.of(context, rootNavigator: true).pop();
+                        }
+                      },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
     );
+
+    debounceTimer?.cancel();
+    if (!mounted) return;
+    if (result == true) {
+      await showWordAddedPopup(context);
+    }
   }
 
+  /// Animates and deletes the word at [index], then persists to storage.
   Future<void> _deleteWord(int index) async {
     if (index < 0 || index >= words.length) return;
     final word = words[index];
-    setState(() => words.removeAt(index));
+    setState(() => _removing.add(word.id));
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+    setState(() {
+      words.removeAt(index);
+      _removing.remove(word.id);
+      _filterWords();
+    });
     await widget.storage.saveWords(words);
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Deleted ${word.eng}')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('The word "${word.eng}" was deleted.')),
+    );
   }
 
   @override
@@ -344,64 +417,58 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   ),
                   itemBuilder: (context, i) {
                     final word = filteredWords[i];
+                    final isRemoving = _removing.contains(word.id);
                     return ReorderableDelayedDragStartListener(
                       key: ValueKey(word.id),
                       index: i,
-                      child: Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                word.eng,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                word.rus,
-                                style: const TextStyle(fontSize: 14),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const Spacer(),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Explain',
-                                    icon: const Icon(Icons.remove_red_eye),
-                                    onPressed: () {
-                                      final idx = words.indexOf(word);
-                                      if (idx >= 0)
-                                        _showWordExplanation(context, idx);
-                                    },
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: isRemoving ? 0.0 : 1.0,
+                        child: Card(
+                          elevation: 2,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  word.eng,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  IconButton(
-                                    tooltip: 'Edit',
-                                    icon: const Icon(Icons.edit),
-                                    onPressed: () {
-                                      final idx = words.indexOf(word);
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  word.rus,
+                                  style: const TextStyle(fontSize: 14),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const Spacer(),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: WordCardMenu(
+                                    onExplain: () {
+                                      final idx = _indexInWordsById(word.id);
+                                      if (idx >= 0) {
+                                        _showWordExplanation(context, idx);
+                                      }
+                                    },
+                                    onEdit: () {
+                                      final idx = _indexInWordsById(word.id);
                                       if (idx >= 0) _addOrEditWord(index: idx);
                                     },
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(Icons.delete),
-                                    onPressed: () {
-                                      final idx = words.indexOf(word);
+                                    onDelete: () {
+                                      final idx = _indexInWordsById(word.id);
                                       if (idx >= 0) _deleteWord(idx);
                                     },
                                   ),
-                                ],
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/gpt_service.dart';
 
+/// Simple developer dialog to try GPT explanations interactively.
 Future<void> showGPTTestDialog(BuildContext context, GptService gpt) async {
   final TextEditingController promptController = TextEditingController();
   String gptAnswer = 'Waiting for response...';
