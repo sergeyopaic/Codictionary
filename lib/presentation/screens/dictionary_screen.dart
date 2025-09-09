@@ -10,6 +10,7 @@ import '../dialogs/gpt_test_dialog.dart';
 import '../widgets/code_dictionary_title.dart';
 import '../widgets/word_card_menu.dart';
 import '../widgets/added_word_popup.dart';
+import '../utils/letter_limit_formatter.dart';
 
 /// Main screen showing the dictionary grid and handling add/edit/delete.
 class DictionaryScreen extends StatefulWidget {
@@ -152,7 +153,15 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           id = const Uuid().v4();
         }
         seen.add(id);
-        fixed.add(Word(id: id, eng: w.eng, rus: w.rus, desc: w.desc, addedAt: w.addedAt));
+        fixed.add(
+          Word(
+            id: id,
+            eng: w.eng,
+            rus: w.rus,
+            desc: w.desc,
+            addedAt: w.addedAt,
+          ),
+        );
       }
       words = fixed;
       // Persist back if anything changed
@@ -303,6 +312,20 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
         } catch (e) {
           desc = 'Error generating description: $e';
         }
+      } else {
+        final original = words[index];
+        final hasChanged =
+            eng != original.eng ||
+            rus != original.rus ||
+            (desc ?? '') != (original.desc ?? '');
+        if (hasChanged) {
+          try {
+            desc = await widget.gpt.explainWord(eng);
+          } catch (e) {
+            // Keep previous or user-entered desc if generation fails
+            desc = desc ?? original.desc;
+          }
+        }
       }
 
       if (!mounted) return;
@@ -311,7 +334,13 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           words[index] = words[index].copyWith(eng: eng, rus: rus, desc: desc);
         } else {
           words.add(
-            Word(id: const Uuid().v4(), eng: eng, rus: rus, desc: desc, addedAt: DateTime.now()),
+            Word(
+              id: const Uuid().v4(),
+              eng: eng,
+              rus: rus,
+              desc: desc,
+              addedAt: DateTime.now(),
+            ),
           );
         }
         _filterWords();
@@ -336,6 +365,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   autofocus: true,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(labelText: 'English'),
+                  inputFormatters: [LetterLimitFormatter(50)],
                   enabled: !isSaving,
                   onSubmitted: (_) async {
                     await save(setDialogState);
@@ -343,14 +373,26 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                     Navigator.pop(context, isEdit ? null : true);
                   },
                   onChanged: (text) {
-                    if (!autoTranslate || text.trim().isEmpty) return;
+                    if (!autoTranslate) return;
+                    final trimmed = text.trim();
                     debounceTimer?.cancel();
+                    if (trimmed.isEmpty) return;
                     debounceTimer = Timer(
                       const Duration(milliseconds: 500),
                       () async {
                         try {
-                          rusController.text = await widget.translate
-                              .translateToRu(text.trim());
+                          final translated = await widget.translate
+                              .translateToRu(trimmed);
+                          if (rusController.text != translated) {
+                            final newValue = TextEditingValue(
+                              text: translated,
+                              selection: TextSelection.collapsed(
+                                offset: translated.length,
+                              ),
+                              composing: TextRange.empty,
+                            );
+                            rusController.value = newValue;
+                          }
                         } catch (_) {}
                       },
                     );
@@ -360,6 +402,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                   controller: rusController,
                   focusNode: rusFocus,
                   decoration: const InputDecoration(labelText: 'Russian'),
+                  inputFormatters: [LetterLimitFormatter(50)],
                   textInputAction: TextInputAction.done,
                   enabled: !isSaving,
                   onSubmitted: (_) async {
