@@ -198,56 +198,73 @@ class _DictionaryBodyState extends State<DictionaryView> {
       bottomNavigationBar: vm.selectionMode
           ? SafeArea(
               top: false,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF000000).withOpacity(0.05),
-                      blurRadius: 8,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: Row(
+              child: Material(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('${vm.selectedCount} selected'),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: 'Add to another dictionary',
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 20,
-                      icon: const Icon(Icons.library_add_outlined),
-                      onPressed: vm.selectedCount == 0 ? null : null,
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      tooltip: 'More (inactive)',
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 20,
-                      icon: const Icon(Icons.more_horiz),
-                      onPressed: vm.selectedCount == 0 ? null : null,
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      tooltip: 'Delete selected',
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 20,
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: vm.selectedCount == 0
-                          ? null
-                          : () async {
-                              final ok = await _confirmBulkDeleteDialog(
-                                context,
-                                vm.selectedCount,
-                              );
-                              if (ok) {
-                                await vm.deleteSelected();
-                                vm.toggleSelectionMode(false);
-                              }
-                            },
+                    Divider(height: 1, thickness: 1, color: Theme.of(context).dividerColor),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          Builder(builder: (context) {
+                            final cs = Theme.of(context).colorScheme;
+                            return Chip(
+                              avatar: Icon(
+                                Icons.checklist,
+                                size: 16,
+                                color: cs.onSecondaryContainer,
+                              ),
+                              label: Text('${vm.selectedCount} selected'),
+                              side: BorderSide(color: cs.outline),
+                              backgroundColor: cs.secondaryContainer,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                            );
+                          }),
+                          const Spacer(),
+                          OverflowBar(
+                            spacing: 8,
+                            overflowAlignment: OverflowBarAlignment.end,
+                            children: [
+                              FilledButton.tonalIcon(
+                                onPressed: null, // inactive for now
+                                icon: const Icon(Icons.library_add_outlined),
+                                label: const Text('Add to dict'),
+                              ),
+                              FilledButton.tonalIcon(
+                                onPressed: null, // inactive for now
+                                icon: const Icon(Icons.more_horiz),
+                                label: const Text('More'),
+                              ),
+                              FilledButton.icon(
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('Delete'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                                  foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
+                                ),
+                                onPressed: vm.selectedCount == 0
+                                    ? null
+                                    : () async {
+                                        final ok = await _confirmBulkDeleteDialog(
+                                          context,
+                                          vm.selectedCount,
+                                        );
+                                        if (ok) {
+                                          await vm.deleteSelected();
+                                          vm.toggleSelectionMode(false);
+                                        }
+                                      },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
