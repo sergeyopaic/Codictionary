@@ -6,6 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/main.dart';
@@ -28,8 +29,19 @@ void main() {
   testWidgets('App builds and shows Add Word button', (
     WidgetTester tester,
   ) async {
+    // Expand the test surface to avoid AppBar title overflow exceptions
+    final previousSize = tester.view.physicalSize;
+    final previousDpr = tester.view.devicePixelRatio;
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const ui.Size(1600, 1200);
+    addTearDown(() {
+      tester.view.devicePixelRatio = previousDpr;
+      tester.view.physicalSize = previousSize;
+    });
     final storage = _MemoryStorageService();
-    final defaults = const [Word(id: '1', eng: 'apple', rus: 'яблоко')];
+    final defaults = [
+      Word(id: '1', eng: 'apple', rus: 'яблоко', addedAt: DateTime.now()),
+    ];
 
     await tester.pumpWidget(
       MyApp(

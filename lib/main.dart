@@ -15,10 +15,10 @@ late final GptService gpt;
 late final TranslateService translate;
 late final StorageService storage;
 
-const List<Word> _defaultWords = [
-  Word(id: '1', eng: 'apple', rus: 'яблоко'),
-  Word(id: '2', eng: 'dog', rus: 'собака'),
-  Word(id: '3', eng: 'house', rus: 'дом'),
+final List<Word> _defaultWords = [
+  Word(id: '1', eng: 'apple', rus: 'яблоко', addedAt: DateTime.now()),
+  Word(id: '2', eng: 'dog', rus: 'собака', addedAt: DateTime.now()),
+  Word(id: '3', eng: 'house', rus: 'дом', addedAt: DateTime.now()),
 ];
 
 Future<void> main() async {

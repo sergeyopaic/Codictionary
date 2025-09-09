@@ -152,7 +152,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           id = const Uuid().v4();
         }
         seen.add(id);
-        fixed.add(Word(id: id, eng: w.eng, rus: w.rus, desc: w.desc));
+        fixed.add(Word(id: id, eng: w.eng, rus: w.rus, desc: w.desc, addedAt: w.addedAt));
       }
       words = fixed;
       // Persist back if anything changed
@@ -311,7 +311,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           words[index] = words[index].copyWith(eng: eng, rus: rus, desc: desc);
         } else {
           words.add(
-            Word(id: const Uuid().v4(), eng: eng, rus: rus, desc: desc),
+            Word(id: const Uuid().v4(), eng: eng, rus: rus, desc: desc, addedAt: DateTime.now()),
           );
         }
         _filterWords();

@@ -17,6 +17,7 @@ class WordRepositoryImpl implements WordRepository {
           eng: word.source,
           rus: word.target,
           desc: word.note,
+          addedAt: DateTime.now(),
         ),
       );
     await storage.saveWords(newList);

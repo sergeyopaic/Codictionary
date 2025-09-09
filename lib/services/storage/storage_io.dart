@@ -18,8 +18,16 @@ class FileStorageService implements StorageService {
       if (!await file.exists()) return [];
       final raw = await file.readAsString();
       if (raw.trim().isEmpty) return [];
-      final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
-      return list.map(Word.fromMap).toList();
+      final decoded = (jsonDecode(raw) as List);
+      final list = decoded.cast<Map<String, dynamic>>();
+      final needsSave = decoded.any((e) =>
+          e is Map && (e['addedAt'] == null || (e['addedAt'] as String?)?.isEmpty == true));
+      final words = list.map(Word.fromMap).toList();
+      if (needsSave) {
+        // Backfill timestamps for pre-existing entries
+        await saveWords(words);
+      }
+      return words;
     } catch (_) {
       return [];
     }
