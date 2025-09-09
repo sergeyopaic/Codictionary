@@ -72,7 +72,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                       child: FittedBox(
                         fit: BoxFit.contain, // или BoxFit.fitHeight
                         child: Image.asset(
-                          'lib/media/delete.png',
+                          'assets/media/cody_delete.png',
                           filterQuality: FilterQuality.high,
                         ),
                       ),
@@ -454,15 +454,15 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        toolbarHeight: 90,
+        toolbarHeight: 120,
         centerTitle: true,
         title: const CodeDictionaryTitle(
-          fontSize: 56,
-          strokeWidth: 5,
+          fontSize: 90,
+          strokeWidth: 4,
           fillColor: Color.fromARGB(255, 231, 255, 223),
           strokeColor: Color(0xCC000000),
           fontFamily: 'CodictionaryCartoon',
-          imagePath: 'lib/media/CODY.png',
+          imagePath: 'assets/media/CODY.png',
         ),
       ),
       body: Column(

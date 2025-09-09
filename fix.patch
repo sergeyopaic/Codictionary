@@ -691,7 +691,7 @@ index ae8c4f9fe5928d26b4543c7ede1e40ab8e61c33b..6559d71a4c1ee107754c1f6874fbb127
            ), // можно заменить на тему
            strokeColor: Color(0xCC000000),
            fontFamily: 'CodictionaryCartoon',
-           imagePath: 'lib/media/CODY.png',
+           imagePath: 'assets/media/CODY.png',
          ),
        ),
        body: Column(

@@ -91,7 +91,7 @@ class _AddedWordToastState extends State<_AddedWordToast>
                     children: [
                       // ClapUp GIF on the left
                       Image.asset(
-                        'lib/media/clap_up.gif',
+                        'assets/media/clap_up.gif',
                         width: 64,
                         height: 64,
                         filterQuality: FilterQuality.high,

@@ -404,7 +404,7 @@ class _AnimatedPopupState extends State<_AnimatedPopup>
           // Потом гифка (поверх карточки)
           Positioned(
             top: -60,
-            child: Image.asset("lib/media/clap_up.gif", width: 80, height: 80),
+            child: Image.asset("assets/media/clap_up.gif", width: 80, height: 80),
           ),
         ],
       ),
@@ -902,7 +902,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           ), // можно заменить на тему
           strokeColor: Color(0xCC000000),
           fontFamily: 'CodictionaryCartoon',
-          imagePath: 'lib/media/CODY.png',
+          imagePath: 'assets/media/CODY.png',
         ),
       ),
       body: Column(

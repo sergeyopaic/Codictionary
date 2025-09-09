@@ -54,7 +54,7 @@
           fillColor: Color.fromARGB(255, 231, 255, 223),
           strokeColor: Color(0xCC000000),
           fontFamily: 'CodictionaryCartoon',
-          imagePath: 'lib/media/CODY.png',
+          imagePath: 'assets/media/CODY.png',
         ),
       ),
       body: Column(
