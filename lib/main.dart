@@ -6,7 +6,9 @@ import 'models/word.dart';
 import 'services/gpt_service.dart';
 import 'services/storage_service.dart';
 import 'services/translate_service.dart';
-import 'presentation/screens/dictionary_screen.dart';
+import 'core/di/initial_bindings.dart';
+import 'core/di/service_locator.dart';
+import 'presentation/dictionary/dictionary_view.dart';
 
 late String? apiKey;
 late String? deeplApiKey;
@@ -29,6 +31,11 @@ Future<void> main() async {
   storage = createStorageService();
   gpt = GptService(apiKey ?? '');
   translate = TranslateService(deeplApiKey ?? '');
+  await registerInitialDependencies();
+  // Register app services for presentation layer via DI
+  sl
+    ..registerLazySingleton<GptService>(() => gpt)
+    ..registerLazySingleton<TranslateService>(() => translate);
 
   runApp(
     MyApp(
@@ -57,6 +64,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Ensure DI also works when main() wasn't run (e.g., widget tests)
+    registerInitialDependenciesSync();
+    if (!sl.isRegistered<GptService>()) {
+      sl.registerLazySingleton<GptService>(() => gpt);
+    }
+    if (!sl.isRegistered<TranslateService>()) {
+      sl.registerLazySingleton<TranslateService>(() => translate);
+    }
     final theme = ThemeData(
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.blue,
@@ -68,12 +83,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Codictionary',
       theme: theme,
-      home: DictionaryScreen(
-        gpt: gpt,
-        translate: translate,
-        storage: storage,
-        defaultWords: defaultWords,
-      ),
+      home: DictionaryView(defaultWords: defaultWords),
     );
   }
 }
