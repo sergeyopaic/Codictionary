@@ -508,6 +508,36 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
           imagePath: 'assets/media/CODY.png',
         ),
       ),
+      drawerScrimColor: Colors.black54,
+      drawer: Builder(
+        builder: (context) {
+          final width = MediaQuery.of(context).size.width * 0.25;
+          return Drawer(
+            width: width.clamp(240.0, 420.0),
+            child: SafeArea(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: const [
+                  DrawerHeader(
+                    child: Text(
+                      'Menu',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.settings),
+                    title: Text('Settings'),
+                    enabled: false,
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
       body: Column(
         children: [
           Padding(
