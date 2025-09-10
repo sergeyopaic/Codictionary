@@ -62,7 +62,7 @@ void main() {
       legacy_model.Word(
         id: '1',
         eng: 'apple',
-        rus: 'яблоко',
+        rus: 'apple_ru',
         desc: 'seed',
         addedAt: DateTime.now(),
       ),
@@ -73,14 +73,20 @@ void main() {
     expect(vm.words.first.eng, 'apple');
 
     // Add
-    await vm.addWord(eng: 'cat', rus: 'кот');
+    expect(await vm.addWord(eng: 'cat', rus: 'cat_ru'), isTrue);
     expect(vm.words.length, 2);
     final added = vm.words.firstWhere((w) => w.eng == 'cat');
     expect(added.desc, 'desc:cat');
 
     // Edit
     final idx = vm.words.indexWhere((w) => w.eng == 'cat');
-    await vm.editWord(idx, eng: 'dog', rus: 'пёс');
+    expect(await vm.editWord(idx, eng: 'dog', rus: 'dog_ru'), isTrue);
+
+    // Duplicate add (same eng) should be prevented
+    expect(await vm.addWord(eng: 'dog', rus: 'dup_ru'), isFalse);
+    // Diacritics and spacing duplicate checks
+    expect(await vm.addWord(eng: 'Ápple', rus: 'apple_dup'), isFalse);
+    expect(await vm.addWord(eng: 'dóg', rus: 'dog_dup'), isFalse);
     expect(vm.words[idx].eng, 'dog');
     expect(vm.words[idx].desc, 'desc:dog');
 
@@ -88,6 +94,8 @@ void main() {
     final idToDelete = vm.words[idx].id;
     await vm.deleteById(idToDelete);
     expect(vm.words.any((w) => w.id == idToDelete), isFalse);
+
+    // Now dog was removed; adding a spaced variant should succeed
+    expect(await vm.addWord(eng: '  DoG  ', rus: 'dog_new'), isTrue);
   });
 }
-

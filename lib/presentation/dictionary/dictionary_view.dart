@@ -7,6 +7,7 @@ import '../utils/letter_limit_formatter.dart';
 import '../dictionary/dictionary_view_model.dart';
 import '../../models/word.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
+import '../vocabs/vocabs_view.dart';
 
 class DictionaryView extends StatefulWidget {
   final List<Word> defaultWords;
@@ -75,13 +76,23 @@ class _DictionaryBodyState extends State<DictionaryView> {
             child: SafeArea(
               child: ListView(
                 padding: EdgeInsets.zero,
-                children: const [
-                  DrawerHeader(
+                children: [
+                  const DrawerHeader(
                     child: Text('Menu',
                         style:
                             TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.library_books),
+                    title: const Text('My Vocabularies'),
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const VocabsView()),
+                      );
+                    },
+                  ),
+                  const ListTile(
                     leading: Icon(Icons.settings),
                     title: Text('Settings'),
                     enabled: false,
@@ -304,14 +315,51 @@ class _DictionaryBodyState extends State<DictionaryView> {
       setDialogState(() => isSaving = true);
 
       if (index == null) {
-        await vm.addWord(eng: eng, rus: rus);
+        final ok = await vm.addWord(eng: eng, rus: rus);
+        if (!ok) {
+          setDialogState(() => isSaving = false);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This word already exists in this vocabulary.'),
+              ),
+            );
+          }
+          return;
+        }
+        // Added successfully: keep dialog open for next input
+        setDialogState(() => isSaving = false);
+        if (context.mounted) {
+          await showWordAddedPopup(context);
+        }
+        engController.clear();
+        rusController.clear();
+        if (context.mounted) {
+          FocusScope.of(context).requestFocus(engFocus);
+        }
       } else {
-        await vm.editWord(index, eng: eng, rus: rus);
+        final ok = await vm.editWord(index, eng: eng, rus: rus);
+        if (!ok) {
+          setDialogState(() => isSaving = false);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This word already exists in this vocabulary.'),
+              ),
+            );
+          }
+          return;
+        }
+        // Edited successfully: keep dialog open to allow further tweaks
+        setDialogState(() => isSaving = false);
+        if (context.mounted) {
+          await showWordAddedPopup(context);
+        }
       }
       if (!mounted) return;
     }
 
-    final result = await showDialog<bool>(
+    await showDialog<bool>(
       context: context,
       barrierDismissible: true,
       builder: (_) => StatefulBuilder(
@@ -331,8 +379,6 @@ class _DictionaryBodyState extends State<DictionaryView> {
                   enabled: !isSaving,
                   onSubmitted: (_) async {
                     await save(setDialogState);
-                    if (!context.mounted) return;
-                    Navigator.pop(context, isEdit ? null : true);
                   },
                   onChanged: (text) {
                     if (!autoTranslate) return;
@@ -367,8 +413,6 @@ class _DictionaryBodyState extends State<DictionaryView> {
                   enabled: !isSaving,
                   onSubmitted: (_) async {
                     await save(setDialogState);
-                    if (!context.mounted) return;
-                    Navigator.pop(context, isEdit ? null : true);
                   },
                 ),
                 Row(
@@ -402,8 +446,6 @@ class _DictionaryBodyState extends State<DictionaryView> {
                     ? null
                     : () async {
                         await save(setDialogState);
-                        if (!context.mounted) return;
-                        Navigator.pop(context, isEdit ? null : true);
                       },
                 child: const Text('Save'),
               ),
@@ -415,9 +457,6 @@ class _DictionaryBodyState extends State<DictionaryView> {
 
     debounceTimer?.cancel();
     if (!mounted) return;
-    if (result == true) {
-      await showWordAddedPopup(context);
-    }
   }
 
   Future<void> _showWordExplanation(

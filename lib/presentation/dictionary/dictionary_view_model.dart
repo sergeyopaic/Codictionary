@@ -115,7 +115,55 @@ class DictionaryViewModel extends ChangeNotifier {
     return _translate.translateToRu(eng);
   }
 
-  Future<void> addWord({required String eng, required String rus}) async {
+  String _normalizeEng(String s) {
+    String out = s.trim().toLowerCase();
+    const Map<String, String> repl = {
+      'à': 'a', 'á': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a', 'ā': 'a',
+      'ç': 'c',
+      'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e', 'ē': 'e',
+      'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ī': 'i',
+      'ñ': 'n',
+      'ò': 'o', 'ó': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ō': 'o',
+      'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ū': 'u',
+      'ý': 'y', 'ÿ': 'y',
+      'æ': 'ae', 'œ': 'oe',
+    };
+    final buffer = StringBuffer();
+    for (final ch in out.split('')) {
+      buffer.write(repl[ch] ?? ch);
+    }
+    out = buffer.toString();
+    // Replace any non a-z0-9 with spaces, then collapse spaces.
+    out = out.replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
+    out = out.replaceAll(RegExp(r'\s+'), ' ');
+    return out;
+  }
+
+  String _normalizeRus(String s) {
+    var out = s.trim().toLowerCase();
+    // Collapse non-letters/digits to single spaces to avoid minor punctuation differences
+    out = out.replaceAll(RegExp(r'[^\p{L}0-9]+', unicode: true), ' ').trim();
+    out = out.replaceAll(RegExp(r'\s+'), ' ');
+    return out;
+  }
+
+  bool _existsInCurrentVocab(String eng, String rus, {String? exceptId}) {
+    final nEng = _normalizeEng(eng);
+    final nRus = _normalizeRus(rus);
+    return words.any((w) {
+      if (w.id == (exceptId ?? '')) return false;
+      // Block if same English already exists in this vocabulary (primary key)
+      if (_normalizeEng(w.eng) == nEng) return true;
+      // Optionally also block if exact same pair already exists
+      if (_normalizeEng(w.eng) == nEng && _normalizeRus(w.rus) == nRus) return true;
+      return false;
+    });
+  }
+
+  Future<bool> addWord({required String eng, required String rus}) async {
+    if (_existsInCurrentVocab(eng, rus)) {
+      return false;
+    }
     final id = const Uuid().v4();
     String? desc;
     try {
@@ -131,10 +179,14 @@ class DictionaryViewModel extends ChangeNotifier {
     _applyFilter();
     notifyListeners();
     await _addWord(AddWordParams(id: id, source: eng, target: rus, note: desc));
+    return true;
   }
 
-  Future<void> editWord(int index, {required String eng, required String rus}) async {
+  Future<bool> editWord(int index, {required String eng, required String rus}) async {
     final original = words[index];
+    if (_existsInCurrentVocab(eng, rus, exceptId: original.id)) {
+      return false;
+    }
     String? desc = original.desc;
     final changed = eng != original.eng || rus != original.rus;
     if (changed) {
@@ -147,6 +199,7 @@ class DictionaryViewModel extends ChangeNotifier {
     notifyListeners();
     // Persist via add use-case by same id (repository replaces/append)
     await _addWord(AddWordParams(id: original.id, source: eng, target: rus, note: desc));
+    return true;
   }
 
   Future<void> deleteById(String id) async {
