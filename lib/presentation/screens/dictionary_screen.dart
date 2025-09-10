@@ -203,62 +203,135 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
   /// Opens a dialog with extended info (GPT) for the word at [index].
   Future<void> _showWordExplanation(BuildContext context, int index) async {
     if (index < 0 || index >= words.length) return;
-    String gptAnswer = words[index].desc ?? 'Waiting for response...';
+    String shortAnswer = words[index].desc ?? 'Waiting for response...';
+    String? longAnswer = words[index].descLong;
 
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            Future<void> regenerate() async {
-              setState(() => gptAnswer = 'Loading...');
+            String _sanitize(String s) => s.replaceAll('*', '');
+            Future<void> regenerateShort() async {
+              setState(() => shortAnswer = 'Loading...');
               try {
                 final eng = words[index].eng;
-                final newText = await widget.gpt.explainWord(eng);
+                final newText = _sanitize(
+                  await widget.gpt.explainWordShort(eng),
+                );
                 if (!context.mounted) return;
-                setState(() => gptAnswer = newText);
+                setState(() => shortAnswer = newText);
                 words[index] = words[index].copyWith(desc: newText);
                 await widget.storage.saveWords(words);
               } catch (e) {
                 if (!context.mounted) return;
-                setState(() => gptAnswer = 'Error: $e');
+                setState(() => shortAnswer = 'Error: $e');
+              }
+            }
+
+            Future<void> generateOrRegenerateLong() async {
+              setState(() => longAnswer = 'Loading...');
+              try {
+                final eng = words[index].eng;
+                final newText = _sanitize(
+                  await widget.gpt.explainWordLong(eng),
+                );
+                if (!context.mounted) return;
+                setState(() => longAnswer = newText);
+                words[index] = words[index].copyWith(descLong: newText);
+                await widget.storage.saveWords(words);
+              } catch (e) {
+                if (!context.mounted) return;
+                setState(() => longAnswer = 'Error: $e');
               }
             }
 
             return AlertDialog(
-              title: Text('Explanation for "${words[index].eng}"'),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SingleChildScrollView(child: Text(gptAnswer)),
-                    if (gptAnswer == 'Loading...') ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 8),
-                          Text('Generating...'),
+              title: Text(
+                'Explanation for "${words[index].eng}"',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+              ),
+              content: DefaultTabController(
+                length: 2,
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const TabBar(
+                        tabs: [
+                          Tab(text: 'Short'),
+                          Tab(text: 'Detailed'),
                         ],
                       ),
-                    ] else ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: regenerate,
-                          child: const Text('Regenerate text'),
+                      SizedBox(
+                        height: 520,
+                        child: TabBarView(
+                          children: [
+                            // Short tab
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: Text(shortAnswer),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: regenerateShort,
+                                      child: const Text('Regenerate short'),
+                                      ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Detailed tab
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: Text(
+                                        longAnswer ??
+                                            'Пока нет подробного описания. Нажмите кнопку ниже, чтобы сгенерировать более детальное описание.',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: generateOrRegenerateLong,
+                                      child: Text(
+                                        (longAnswer == null ||
+                                                longAnswer == 'Loading...')
+                                            ? 'Generate a more detailed description'
+                                            : 'Regenerate detailed description',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
               ),
               actions: [
@@ -308,7 +381,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
 
       if (!isEdit) {
         try {
-          desc = await widget.gpt.explainWord(eng);
+          desc = (await widget.gpt.explainWordShort(eng)).replaceAll('*', '');
         } catch (e) {
           desc = 'Error generating description: $e';
         }
@@ -320,7 +393,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
             (desc ?? '') != (original.desc ?? '');
         if (hasChanged) {
           try {
-            desc = await widget.gpt.explainWord(eng);
+            desc = (await widget.gpt.explainWordShort(eng)).replaceAll('*', '');
           } catch (e) {
             // Keep previous or user-entered desc if generation fails
             desc = desc ?? original.desc;
@@ -433,7 +506,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                       SizedBox(width: 10),
-                      Text('Generating & saving...'),
+                      Text('Loading......saving...'),
                     ],
                   ),
                 ],
@@ -659,3 +732,4 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     );
   }
 }
+

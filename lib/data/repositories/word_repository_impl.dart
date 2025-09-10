@@ -10,17 +10,21 @@ class WordRepositoryImpl implements WordRepository {
   @override
   Future<void> add(WordEntity word) async {
     final list = await storage.loadWords();
-    final newList = List<legacy_model.Word>.from(list)
-      ..add(
-        legacy_model.Word(
-          id: word.id,
-          eng: word.source,
-          rus: word.target,
-          desc: word.note,
-          addedAt: DateTime.now(),
-        ),
-      );
-    await storage.saveWords(newList);
+    final updated = legacy_model.Word(
+      id: word.id,
+      eng: word.source,
+      rus: word.target,
+      desc: word.note,
+      addedAt: DateTime.now(),
+    );
+    int existing = list.indexWhere((w) => w.id == word.id);
+    if (existing >= 0) {
+      list[existing] = updated;
+      await storage.saveWords(list);
+    } else {
+      final newList = List<legacy_model.Word>.from(list)..add(updated);
+      await storage.saveWords(newList);
+    }
   }
 
   @override

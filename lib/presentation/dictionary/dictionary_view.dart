@@ -1,473 +1,363 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../widgets/code_dictionary_title.dart';
-import '../widgets/word_card_menu.dart';
-import '../widgets/added_word_popup.dart';
-import '../utils/letter_limit_formatter.dart';
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
+
 import '../dictionary/dictionary_view_model.dart';
 import '../../models/word.dart';
-import 'package:reorderable_grid_view/reorderable_grid_view.dart';
-import '../vocabs/vocabs_view.dart';
-import '../core/widgets/animated_item_wrapper.dart';
+import '../widgets/code_dictionary_title.dart';
+import '../widgets/word_card_menu.dart';
+import '../dialogs/confirm_delete_dialog.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
-
-enum _SortOption { alphabetical, alphaDesc, dateAdded }
+import '../widgets/added_word_popup.dart' as toasts;
 
 class DictionaryView extends StatefulWidget {
   final List<Word> defaultWords;
   const DictionaryView({super.key, required this.defaultWords});
+
   @override
-  State<DictionaryView> createState() => _DictionaryBodyState();
+  State<DictionaryView> createState() => _DictionaryViewState();
 }
 
-class _DictionaryBodyState extends State<DictionaryView> {
-  final TextEditingController searchController = TextEditingController();
-  Timer? debounce;
+class _DictionaryViewState extends State<DictionaryView> {
   late final DictionaryViewModel vm;
+  final TextEditingController _search = TextEditingController();
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     vm = DictionaryViewModel();
     vm.load(seed: widget.defaultWords);
+    _search.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      vm.onQueryChanged(_search.text);
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _search.dispose();
+    vm.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: vm,
-      builder: (context, _) => Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 120,
-          centerTitle: true,
-          leadingWidth: 100,
-          leading: Builder(
-            builder: (ctx) {
-              return Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.menu),
-                    tooltip: 'Menu',
-                    onPressed: () => Scaffold.of(ctx).openDrawer(),
+      builder: (context, _) {
+        return Scaffold(
+          appBar: vm.selectionMode
+               ? AppBar(
+                  title: Text('${vm.selectedCount} selected'),
+                  leading: IconButton(
+                    tooltip: 'Close selection',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => vm.toggleSelectionMode(false),
                   ),
-                  AnimatedBuilder(
-                    animation: vm,
-                    builder: (context, _) => Checkbox(
-                      value: vm.selectionMode,
-                      onChanged: (v) => vm.toggleSelectionMode(v ?? false),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          title: const CodeDictionaryTitle(
-            key: ValueKey('app_title'),
-            fontSize: 90,
-            strokeWidth: 4,
-            fillColor: Color.fromARGB(255, 231, 255, 223),
-            strokeColor: Color(0xCC000000),
-            fontFamily: 'CodictionaryCartoon',
-            imagePath: 'assets/media/CODY.png',
-          ),
-          actions: [
-            PopupMenuButton<_SortOption>(
-              tooltip: 'Sort',
-              icon: const Icon(Icons.sort),
-              onSelected: (_SortOption value) {
-                switch (value) {
-                  case _SortOption.alphabetical:
-                    vm.setSort(SortMode.alphaAsc);
-                    break;
-                  case _SortOption.alphaDesc:
-                    vm.setSort(SortMode.alphaDesc);
-                    break;
-                  case _SortOption.dateAdded:
-                    vm.setSort(SortMode.dateAdded);
-                    break;
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: _SortOption.alphabetical,
-                  child: Row(
-                    children: const [
-                      Icon(Icons.sort_by_alpha),
-                      SizedBox(width: 10),
-                      Text('Alphabetical'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: _SortOption.alphaDesc,
-                  child: Row(
-                    children: const [
-                      Icon(Icons.sort_by_alpha),
-                      SizedBox(width: 10),
-                      Text('Alphabetical Z-A'),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: _SortOption.dateAdded,
-                  child: Row(
-                    children: const [
-                      Icon(Icons.schedule),
-                      SizedBox(width: 10),
-                      Text('Date added'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 4),
-          ],
-        ),
-        drawerScrimColor: Colors.black54,
-        drawer: Builder(
-          builder: (context) {
-            final width = MediaQuery.of(context).size.width * 0.25;
-            return Drawer(
-              width: width.clamp(240.0, 420.0),
-              child: SafeArea(
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    const DrawerHeader(
-                      child: Text(
-                        'Menu',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  actions: [
+                      IconButton(
+                        tooltip: vm.areAllSelected ? 'Clear selection' : 'Select all',
+                        icon: Icon(vm.areAllSelected ? Icons.select_all : Icons.select_all_outlined),
+                        onPressed: () {
+                          if (vm.areAllSelected) {
+                            vm.clearSelection();
+                          } else {
+                            vm.selectAll();
+                          }
+                        },
                       ),
+                      if (vm.selectedCount > 0)
+                        IconButton(
+                          tooltip: 'Delete selected',
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () async {
+                            final ok = await showConfirmBulkDeleteDialog(
+                              context,
+                              vm.selectedCount,
+                            );
+                            if (ok) {
+                              // Capture removed words before deletion for undo
+                              final removed = vm.words
+                                  .where((w) => vm.selected.contains(w.id))
+                                  .toList(growable: false);
+                              final count = removed.length;
+                              await vm.deleteSelected();
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('$count word(s) deleted.'),
+                                  action: SnackBarAction(
+                                    label: 'UNDO',
+                                    onPressed: () {
+                                      // Fire-and-forget restore
+                                      vm.restoreWords(removed);
+                                    },
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                  ],
+                )
+              : AppBar(
+                  toolbarHeight: 120,
+                  centerTitle: true,
+                  title: const CodeDictionaryTitle(
+                    fontSize: 90,
+                    strokeWidth: 4,
+                    fillColor: Color.fromARGB(255, 231, 255, 223),
+                    strokeColor: Color(0xCC000000),
+                    fontFamily: 'CodictionaryCartoon',
+                    imagePath: 'assets/media/CODY.png',
+                  ),
+                  actions: [
+                    IconButton(
+                      tooltip: 'Sort A-Z',
+                      onPressed: () => vm.setSort(SortMode.alphaAsc),
+                      icon: const Icon(Icons.sort_by_alpha),
                     ),
-                    ListTile(
-                      leading: const Icon(Icons.library_books),
-                      title: const Text('My Vocabularies'),
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const VocabsView()),
-                        );
-                      },
+                    IconButton(
+                      tooltip: 'Sort Z-A',
+                      onPressed: () => vm.setSort(SortMode.alphaDesc),
+                      icon: const Icon(Icons.swap_vert),
                     ),
-                    const ListTile(
-                      leading: Icon(Icons.settings),
-                      title: Text('Settings'),
-                      enabled: false,
+                    IconButton(
+                      tooltip: 'Sort by date',
+                      onPressed: () => vm.setSort(SortMode.dateAdded),
+                      icon: const Icon(Icons.schedule),
                     ),
                   ],
                 ),
-              ),
-            );
-          },
-        ),
-        body: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: searchController,
-                decoration: const InputDecoration(
-                  prefixIcon: Icon(Icons.search),
-                  hintText: 'Search...',
+          drawerScrimColor: Colors.black54,
+          drawer: const _DictionarySidebar(),
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: _search,
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search...',
+                  ),
                 ),
-                onChanged: (t) {
-                  debounce?.cancel();
-                  debounce = Timer(const Duration(milliseconds: 200), () {
-                    vm.onQueryChanged(t);
-                  });
-                },
               ),
-            ),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final width = constraints.maxWidth;
-                  final columns = width.isFinite
-                      ? (width / 220).floor().clamp(1, 6)
-                      : 2;
-                  return ReorderableGridView.builder(
-                    itemCount: vm.filtered.length,
-                    onReorder: (oldIndex, newIndex) =>
-                        vm.reorder(oldIndex, newIndex),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 1.6,
-                    ),
-                    itemBuilder: (context, i) {
-                      final word = vm.filtered[i];
-                      final isRemoving = vm.removing.contains(word.id);
-                      final isSelected = vm.selected.contains(word.id);
-                      return ReorderableDelayedDragStartListener(
-                        key: ValueKey(word.id),
-                        index: i,
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 200),
-                          opacity: isRemoving ? 0.0 : 1.0,
-                          child: AnimatedItemWrapper(
-                            switchKey: ValueKey(
-                              '${vm.currentSort.name}-${word.id}-$i',
-                            ),
-                            child: Card(
-                              elevation: 2,
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+                    final columns = width.isFinite
+                        ? (width / 220).floor().clamp(1, 6)
+                        : 2;
+                    return ReorderableGridView.builder(
+                      itemCount: vm.filtered.length,
+                      onReorder: (oldIndex, newIndex) {
+                        vm.reorder(oldIndex, newIndex);
+                      },
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.6,
+                      ),
+                      itemBuilder: (context, i) {
+                        final word = vm.filtered[i];
+                        final isRemoving = vm.removing.contains(word.id);
+                        final isSelected = vm.selected.contains(word.id);
+                        return ReorderableDelayedDragStartListener(
+                          key: ValueKey(word.id),
+                          index: i,
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 200),
+                            opacity: isRemoving ? 0.0 : 1.0,
+                            child: InkWell(
+                              onLongPress: () {
+                                if (!vm.selectionMode) vm.toggleSelectionMode(true);
+                                vm.toggleSelect(word.id);
+                              },
+                              onTap: () {
+                                if (vm.selectionMode) {
+                                  vm.toggleSelect(word.id);
+                                }
+                              },
                               child: Stack(
                                 children: [
-                                  Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          word.eng,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          word.rus,
-                                          style: const TextStyle(fontSize: 14),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const Spacer(),
-                                        Align(
-                                          alignment: Alignment.centerRight,
-                                          child: WordCardMenu(
-                                            onExplain: () =>
-                                                _showWordExplanation(
-                                                  context,
-                                                  vm,
-                                                  i,
-                                                ),
-                                            onEdit: () => _showAddEditDialog(
-                                              context,
-                                              vm,
-                                              index: i,
+                                  Card(
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      side: vm.selectionMode && isSelected
+                                          ? BorderSide(
+                                              color: Theme.of(context).colorScheme.primary,
+                                              width: 2,
+                                            )
+                                          : BorderSide.none,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            word.eng,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
                                             ),
-                                            onDelete: () async {
-                                              final ok =
-                                                  await _confirmDeleteDialog(
-                                                    context,
-                                                    word.eng,
-                                                  );
-                                              if (ok) {
-                                                await vm.deleteById(word.id);
-                                              }
-                                            },
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(height: 6),
+                                          Text(
+                                            word.rus,
+                                            style: const TextStyle(fontSize: 14),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const Spacer(),
+                                          Align(
+                                            alignment: Alignment.centerRight,
+                                            child: WordCardMenu(
+                                              onExplain: () {
+                                                final idx = vm.words.indexWhere((w) => w.id == word.id);
+                                                if (idx >= 0) {
+                                                  _showWordExplanation(context, vm, idx);
+                                                }
+                                              },
+                                              onEdit: () async {
+                                                final idx = vm.words.indexWhere((w) => w.id == word.id);
+                                                if (idx >= 0) await _addOrEditWord(vm: vm, index: idx);
+                                              },
+                                              onDelete: () async {
+                                                final ok = await showConfirmDeleteDialog(context, word.eng);
+                                                if (ok) {
+                                                  // Keep a copy for undo
+                                                  final removed = word;
+                                                  await vm.deleteById(word.id);
+                                                  if (!mounted) return;
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(
+                                                      content: Text('"${removed.eng}" deleted.'),
+                                                      action: SnackBarAction(
+                                                        label: 'UNDO',
+                                                        onPressed: () {
+                                                          vm.restoreWord(removed);
+                                                        },
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                   if (vm.selectionMode)
                                     Positioned(
-                                      left: 4,
-                                      bottom: 4,
-                                      child: Checkbox(
-                                        value: isSelected,
-                                        onChanged: (_) =>
-                                            vm.toggleSelect(word.id),
+                                      top: 6,
+                                      left: 6,
+                                      child: AnimatedScale(
+                                        scale: isSelected ? 1.0 : 0.9,
+                                        duration: const Duration(milliseconds: 150),
+                                        child: CircleAvatar(
+                                          radius: 12,
+                                          backgroundColor: isSelected
+                                              ? Theme.of(context).colorScheme.primary
+                                              : Colors.black12,
+                                          child: Icon(
+                                            isSelected ? Icons.check : Icons.circle,
+                                            size: 14,
+                                            color: isSelected ? Colors.white : Colors.white70,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                 ],
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-        bottomNavigationBar: vm.selectionMode
-            ? SafeArea(
-                top: false,
-                child: Material(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: Theme.of(context).dividerColor,
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          children: [
-                            Builder(
-                              builder: (context) {
-                                final cs = Theme.of(context).colorScheme;
-                                return Chip(
-                                  avatar: Icon(
-                                    Icons.checklist,
-                                    size: 16,
-                                    color: cs.onSecondaryContainer,
-                                  ),
-                                  label: Text('${vm.selectedCount} selected'),
-                                  side: BorderSide(color: cs.outline),
-                                  backgroundColor: cs.secondaryContainer,
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                );
-                              },
-                            ),
-                            const Spacer(),
-                            OverflowBar(
-                              spacing: 8,
-                              overflowAlignment: OverflowBarAlignment.end,
-                              children: [
-                                FilledButton.tonalIcon(
-                                  onPressed: null, // inactive for now
-                                  icon: const Icon(Icons.library_add_outlined),
-                                  label: const Text('Add to dict'),
-                                ),
-                                FilledButton.tonalIcon(
-                                  onPressed: null, // inactive for now
-                                  icon: const Icon(Icons.more_horiz),
-                                  label: const Text('More'),
-                                ),
-                                FilledButton.icon(
-                                  icon: const Icon(Icons.delete_outline),
-                                  label: const Text('Delete'),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Theme.of(
-                                      context,
-                                    ).colorScheme.errorContainer,
-                                    foregroundColor: Theme.of(
-                                      context,
-                                    ).colorScheme.onErrorContainer,
-                                  ),
-                                  onPressed: vm.selectedCount == 0
-                                      ? null
-                                      : () async {
-                                          final ok =
-                                              await showConfirmBulkDeleteDialog(
-                                                context,
-                                                vm.selectedCount,
-                                              );
-                                          if (ok) {
-                                            await vm.deleteSelected();
-                                            vm.toggleSelectionMode(false);
-                                          }
-                                        },
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                        );
+                      },
+                    );
+                  },
                 ),
-              )
-            : null,
-        floatingActionButton: FloatingActionButton.extended(
-          icon: const Icon(Icons.add),
-          label: const Text('Add Word'),
-          onPressed: () => _showAddEditDialog(context, vm),
-        ),
-      ),
+              ),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () async {
+              await _addOrEditWord(vm: vm);
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Add Word'),
+          ),
+        );
+      },
     );
   }
 
-  Future<void> _showAddEditDialog(
-    BuildContext context,
-    DictionaryViewModel vm, {
-    int? index,
-  }) async {
+  Future<void> _addOrEditWord({required DictionaryViewModel vm, int? index}) async {
     final isEdit = index != null;
-    final engController = TextEditingController(
-      text: isEdit ? vm.words[index].eng : '',
-    );
-    final rusController = TextEditingController(
-      text: isEdit ? vm.words[index].rus : '',
-    );
+    final editIndex = index ?? -1;
+    final engController = TextEditingController(text: isEdit ? vm.words[editIndex].eng : '');
+    final rusController = TextEditingController(text: isEdit ? vm.words[editIndex].rus : '');
     final engFocus = FocusNode();
     final rusFocus = FocusNode();
     bool autoTranslate = true;
     bool isSaving = false;
-    Timer? debounceTimer;
+    bool didEdit = false;
 
-    Future<void> save(StateSetter setDialogState) async {
+    Future<bool> save(StateSetter setDialogState) async {
       final eng = engController.text.trim();
       String rus = rusController.text.trim();
-      if (eng.isEmpty) return;
-
+      if (eng.isEmpty) return false;
       if (autoTranslate && rus.isEmpty) {
         try {
-          rus = await vm.autoTranslate(eng);
+          rus = await vm.translateToRu(eng);
         } catch (_) {}
       }
-
       setDialogState(() => isSaving = true);
-
-      if (index == null) {
-        final ok = await vm.addWord(eng: eng, rus: rus);
-        if (!ok) {
-          setDialogState(() => isSaving = false);
+      bool success = false;
+      if (isEdit) {
+        final ok = await vm.editWord(editIndex, eng: eng, rus: rus);
+        if (ok) {
+          didEdit = true;
+          success = true;
+        } else {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('This word already exists in this vocabulary.'),
-              ),
+              const SnackBar(content: Text('This word already exists in this vocabulary.')),
             );
           }
-          return;
-        }
-        // Added successfully: keep dialog open for next input
-        setDialogState(() => isSaving = false);
-        if (context.mounted) {
-          await showWordAddedPopup(context);
-        }
-        engController.clear();
-        rusController.clear();
-        if (context.mounted) {
-          FocusScope.of(context).requestFocus(engFocus);
         }
       } else {
-        final ok = await vm.editWord(index, eng: eng, rus: rus);
-        if (!ok) {
-          setDialogState(() => isSaving = false);
+        final ok = await vm.addWord(eng: eng, rus: rus);
+        if (ok) {
+          success = true;
+        } else {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('This word already exists in this vocabulary.'),
-              ),
+              const SnackBar(content: Text('This word already exists in this vocabulary.')),
             );
           }
-          return;
-        }
-        // Edited successfully: keep dialog open to allow further tweaks
-        setDialogState(() => isSaving = false);
-        if (context.mounted) {
-          await showWordAddedPopup(context);
         }
       }
-      if (!mounted) return;
+      if (context.mounted) {
+        setDialogState(() => isSaving = false);
+      }
+      return success;
     }
 
-    await showDialog<bool>(
+    final added = await showDialog<bool>(
       context: context,
       barrierDismissible: true,
       builder: (_) => StatefulBuilder(
@@ -483,29 +373,29 @@ class _DictionaryBodyState extends State<DictionaryView> {
                   autofocus: true,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(labelText: 'English'),
-                  inputFormatters: [LetterLimitFormatter(50)],
-                  enabled: !isSaving,
                   onSubmitted: (_) async {
-                    await save(setDialogState);
+                    final ok = await save(setDialogState);
+                    if (!context.mounted) return;
+                    if (ok) {
+                      Navigator.pop(context, isEdit ? null : true);
+                    }
                   },
-                  onChanged: (text) {
+                  onChanged: (text) async {
                     if (!autoTranslate) return;
                     final trimmed = text.trim();
-                    debounceTimer?.cancel();
+                    _debounce?.cancel();
                     if (trimmed.isEmpty) return;
-                    debounceTimer = Timer(
+                    _debounce = Timer(
                       const Duration(milliseconds: 500),
                       () async {
                         try {
-                          final translated = await vm.autoTranslate(trimmed);
+                          final translated = await vm.translateToRu(trimmed);
                           if (rusController.text != translated) {
-                            rusController.value = TextEditingValue(
+                            final newValue = TextEditingValue(
                               text: translated,
-                              selection: TextSelection.collapsed(
-                                offset: translated.length,
-                              ),
-                              composing: TextRange.empty,
+                              selection: TextSelection.collapsed(offset: translated.length),
                             );
+                            rusController.value = newValue;
                           }
                         } catch (_) {}
                       },
@@ -516,21 +406,20 @@ class _DictionaryBodyState extends State<DictionaryView> {
                   controller: rusController,
                   focusNode: rusFocus,
                   decoration: const InputDecoration(labelText: 'Russian'),
-                  inputFormatters: [LetterLimitFormatter(50)],
                   textInputAction: TextInputAction.done,
-                  enabled: !isSaving,
                   onSubmitted: (_) async {
-                    await save(setDialogState);
+                    final ok = await save(setDialogState);
+                    if (!context.mounted) return;
+                    if (ok) {
+                      Navigator.pop(context, isEdit ? null : true);
+                    }
                   },
                 ),
                 Row(
                   children: [
                     Checkbox(
                       value: autoTranslate,
-                      onChanged: isSaving
-                          ? null
-                          : (v) =>
-                                setDialogState(() => autoTranslate = v ?? true),
+                      onChanged: isSaving ? null : (v) => setDialogState(() => autoTranslate = v ?? true),
                     ),
                     const Text('Auto-translate'),
                   ],
@@ -539,13 +428,9 @@ class _DictionaryBodyState extends State<DictionaryView> {
                   const SizedBox(height: 8),
                   Row(
                     children: const [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
                       SizedBox(width: 10),
-                      Text('Generating & saving...'),
+                      Text('Saving...'),
                     ],
                   ),
                 ],
@@ -553,14 +438,18 @@ class _DictionaryBodyState extends State<DictionaryView> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
+                onPressed: isSaving ? null : () => Navigator.of(context, rootNavigator: true).pop(),
+                child: const Text('Cancel'),
               ),
-              FilledButton(
+              ElevatedButton(
                 onPressed: isSaving
                     ? null
                     : () async {
-                        await save(setDialogState);
+                        final ok = await save(setDialogState);
+                        if (!context.mounted) return;
+                        if (ok) {
+                          Navigator.of(context, rootNavigator: true).pop(!isEdit);
+                        }
                       },
                 child: const Text('Save'),
               ),
@@ -570,69 +459,191 @@ class _DictionaryBodyState extends State<DictionaryView> {
       ),
     );
 
-    debounceTimer?.cancel();
-    if (!mounted) return;
+    if (added == true) {
+      if (!mounted) return;
+      await toasts.showWordAddedPopup(context);
+    }
+    if (didEdit) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Word updated.')),
+      );
+    }
   }
 
-  Future<void> _showWordExplanation(
-    BuildContext context,
-    DictionaryViewModel vm,
-    int index,
-  ) async {
+  Future<void> _showWordExplanation(BuildContext context, DictionaryViewModel vm, int index) async {
     if (index < 0 || index >= vm.words.length) return;
-    String gptAnswer = vm.currentDescription(index);
+    String shortAnswer = vm.currentDescription(index);
+    String? longAnswer = vm.currentLongDescription(index);
+    int tabIndex = 0;
 
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            Future<void> regenerate() async {
-              setState(() => gptAnswer = 'Loading...');
+            Future<void> regenerateShort() async {
+              setState(() => shortAnswer = 'Loading...');
               try {
                 final newText = await vm.regenerateDescription(index);
                 if (!context.mounted) return;
-                setState(() => gptAnswer = newText);
+                setState(() => shortAnswer = newText);
               } catch (e) {
                 if (!context.mounted) return;
-                setState(() => gptAnswer = 'Error: $e');
+                setState(() => shortAnswer = 'Error: $e');
+              }
+            }
+
+            Future<void> generateOrRegenerateLong() async {
+              setState(() => longAnswer = 'Loading...');
+              try {
+                final newText = await vm.generateOrRegenerateLong(index);
+                if (!context.mounted) return;
+                setState(() => longAnswer = newText);
+              } catch (e) {
+                if (!context.mounted) return;
+                setState(() => longAnswer = 'Error: $e');
               }
             }
 
             return AlertDialog(
-              title: Text('Explanation for "${vm.words[index].eng}"'),
+              title: Text(
+                'Explanation for "${vm.words[index].eng}"',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+              ),
               content: SizedBox(
                 width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SingleChildScrollView(child: Text(gptAnswer)),
-                    if (gptAnswer == 'Loading...') ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: const [
-                          SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                child: SizedBox(
+                  height: 520,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 12, right: 12),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Builder(
+                                  builder: (context) {
+                                    final bool hasLong =
+                                        (longAnswer != null && longAnswer!.trim().isNotEmpty && longAnswer != 'Loading...' && longAnswer != 'No detailed description yet.');
+                                    final bool isDetailed = tabIndex == 1;
+                                    // For Short tab: text only inside the container
+                                    if (!isDetailed) {
+                                      return _BookLikeContainer(
+                                        backgroundColor: const Color(0xFFFFF8E7),
+                                        borderColor: const Color(0xFFD9C9A3),
+                                        spineColor: const Color(0xFFE0D2B6),
+                                        child: Padding(
+                                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: SingleChildScrollView(
+                                                  child: Text(
+                                                    shortAnswer,
+                                                    style: const TextStyle(height: 1.35),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Image.asset(
+                                                'assets/media/cody_info.png',
+                                                width: 120,
+                                                height: 120,
+                                                filterQuality: FilterQuality.high,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                    // For Detailed tab: place the image inside the container on the right if content exists
+                                    return _BookLikeContainer(
+                                      backgroundColor: const Color(0xFFEFF6FF),
+                                      borderColor: const Color(0xFFB6D0F5),
+                                      spineColor: const Color(0xFFC8DBF8),
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: SingleChildScrollView(
+                                                child: Text(
+                                                  longAnswer ?? 'No detailed description yet.',
+                                                  style: const TextStyle(height: 1.35),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Image.asset(
+                                              'assets/media/cody_info.png',
+                                              width: 120,
+                                              height: 120,
+                                              filterQuality: FilterQuality.high,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: tabIndex == 0
+                                    ? IconButton(
+                                        tooltip: 'Regenerate short',
+                                        onPressed: regenerateShort,
+                                        icon: const Icon(Icons.autorenew),
+                                      )
+                                    : IconButton(
+                                        tooltip: (longAnswer == null || longAnswer == 'Loading...')
+                                            ? 'Generate a more detailed description'
+                                            : 'Regenerate detailed description',
+                                        onPressed: generateOrRegenerateLong,
+                                        icon: const Icon(Icons.autorenew),
+                                      ),
+                              ),
+                            ],
                           ),
-                          SizedBox(width: 8),
-                          Text('Generating...'),
-                        ],
-                      ),
-                    ] else ...[
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: regenerate,
-                          child: const Text('Regenerate text'),
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      Column(
+                        mainAxisSize: MainAxisSize.max,
+                        children: [
+                          IconButton(
+                            tooltip: 'Short',
+                            onPressed: () => setState(() => tabIndex = 0),
+                            icon: Icon(
+                              Icons.flash_on,
+                              color: tabIndex == 0 ? Theme.of(context).colorScheme.primary : null,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          IconButton(
+                            tooltip: 'Detailed',
+                            onPressed: () => setState(() => tabIndex = 1),
+                            icon: Icon(
+                              Icons.article_outlined,
+                              color: tabIndex == 1 ? Theme.of(context).colorScheme.primary : null,
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
-                  ],
+                  ),
                 ),
               ),
               actions: [
@@ -647,77 +658,88 @@ class _DictionaryBodyState extends State<DictionaryView> {
       },
     );
   }
+}
 
-  Future<bool> _confirmDeleteDialog(
-    BuildContext context,
-    String wordEng,
-  ) async {
-    final theme = Theme.of(context);
-    return (await showDialog<bool>(
-          context: context,
-          barrierDismissible: true,
-          builder: (context) {
-            return AlertDialog(
-              contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              content: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 84,
-                      child: FittedBox(
-                        fit: BoxFit.contain,
-                        child: Image.asset(
-                          'assets/media/cody_delete.png',
-                          filterQuality: FilterQuality.high,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Delete this word?',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '"$wordEng" will be removed from your dictionary.',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+class _DictionarySidebar extends StatelessWidget {
+  const _DictionarySidebar();
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.of(context).size.width * 0.25;
+    return Drawer(
+      width: width.clamp(240.0, 420.0),
+      child: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: const [
+            DrawerHeader(
+              child: Text(
+                'Menu',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () =>
-                      Navigator.of(context, rootNavigator: true).pop(false),
-                  child: const Text('Cancel'),
+            ),
+            ListTile(
+              leading: Icon(Icons.settings),
+              title: Text('Settings'),
+              enabled: false,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BookLikeContainer extends StatelessWidget {
+  const _BookLikeContainer({
+    required this.child,
+    required this.backgroundColor,
+    required this.borderColor,
+    required this.spineColor,
+  });
+
+  final Widget child;
+  final Color backgroundColor;
+  final Color borderColor;
+  final Color spineColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: const [
+          BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 6)),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: Container(
+              width: 10,
+              decoration: BoxDecoration(
+                color: spineColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14),
+                  bottomLeft: Radius.circular(14),
                 ),
-                FilledButton.icon(
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: theme.colorScheme.error,
-                    foregroundColor: theme.colorScheme.onError,
-                  ),
-                  onPressed: () =>
-                      Navigator.of(context, rootNavigator: true).pop(true),
-                ),
-              ],
-            );
-          },
-        )) ??
-        false;
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: child,
+          ),
+        ],
+      ),
+    );
   }
 }

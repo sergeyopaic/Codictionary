@@ -15,7 +15,7 @@ Future<void> showGPTTestDialog(BuildContext context, GptService gpt) async {
             if (prompt.isEmpty) return;
             setState(() => gptAnswer = 'Loading...');
             try {
-              final answer = await gpt.explainWord(prompt);
+              final answer = (await gpt.explainWordShort(prompt)).replaceAll('*', '');
               if (!context.mounted) return;
               setState(() => gptAnswer = answer);
             } catch (e) {

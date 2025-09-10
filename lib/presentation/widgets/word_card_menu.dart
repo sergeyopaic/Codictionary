@@ -19,7 +19,6 @@ class WordCardMenu extends StatefulWidget {
 
 class _WordCardMenuState extends State<WordCardMenu>
     with SingleTickerProviderStateMixin {
-  final LayerLink _link = LayerLink();
   OverlayEntry? _entry;
   late final AnimationController _controller;
   late final Animation<double> _fade;
@@ -27,6 +26,8 @@ class _WordCardMenuState extends State<WordCardMenu>
   late final Animation<Offset> _slide;
 
   static const double _menuWidth = 220;
+  static const double _menuHeightEstimate = 180;
+  static const double _screenPadding = 8;
 
   @override
   void initState() {
@@ -63,54 +64,90 @@ class _WordCardMenuState extends State<WordCardMenu>
   }
 
   void _showEntry() {
+    final overlay =
+        Overlay.of(context, rootOverlay: true) ?? Overlay.of(context);
+    if (overlay == null) return;
+
+    final overlaySize = MediaQuery.of(context).size;
+    final targetBox = context.findRenderObject() as RenderBox?;
+    if (targetBox == null) return;
+    final targetTopLeft = targetBox.localToGlobal(Offset.zero);
+    final targetBottomRight = targetBox.localToGlobal(
+      targetBox.size.bottomRight(Offset.zero),
+    );
+
+    double dx =
+        targetBottomRight.dx - _menuWidth; // right-align to button right
+    double dy = targetBottomRight.dy + 8; // show below by default
+
+    if (dx < _screenPadding) dx = _screenPadding;
+    if (dx + _menuWidth > overlaySize.width - _screenPadding) {
+      dx = overlaySize.width - _screenPadding - _menuWidth;
+    }
+
+    // Prevent bottom overflow using height estimate; if overflow, shift up.
+    final overflowBottom =
+        (dy + _menuHeightEstimate) - (overlaySize.height - _screenPadding);
+    if (overflowBottom > 0) {
+      dy -= overflowBottom;
+    }
+    if (dy < _screenPadding) dy = _screenPadding;
+
     final entry = OverlayEntry(
       builder: (context) {
-        return Stack(
-          children: [
-            // Barrier to close on outside tap
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onTap: _removeEntry,
+        return SizedBox.expand(
+          child: Stack(
+            children: [
+              // Barrier to close on outside tap
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _removeEntry,
+                ),
               ),
-            ),
-            CompositedTransformFollower(
-              link: _link,
-              showWhenUnlinked: false,
-              offset: const Offset(-_menuWidth + 28, 8),
-              child: FadeTransition(
-                opacity: _fade,
-                child: SlideTransition(
-                  position: _slide,
-                  child: ScaleTransition(
-                    scale: _scale,
-                    alignment: Alignment.topRight,
-                    child: _MenuCard(
-                      width: _menuWidth,
-                      onExplain: () {
-                        _removeEntry();
-                        widget.onExplain();
-                      },
-                      onEdit: () {
-                        _removeEntry();
-                        widget.onEdit();
-                      },
-                      onDelete: () {
-                        _removeEntry();
-                        widget.onDelete();
-                      },
+              Positioned(
+                left: dx,
+                top: dy,
+                child: FadeTransition(
+                  opacity: _fade,
+                  child: SlideTransition(
+                    position: _slide,
+                    child: ScaleTransition(
+                      scale: _scale,
+                      alignment: Alignment.topRight,
+                      child: _MenuCard(
+                        width: _menuWidth,
+                        onExplain: () {
+                          _removeEntry();
+                          widget.onExplain();
+                        },
+                        onEdit: () {
+                          _removeEntry();
+                          widget.onEdit();
+                        },
+                        onDelete: () {
+                          _removeEntry();
+                          widget.onDelete();
+                        },
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
 
     _entry = entry;
-    Overlay.of(context, rootOverlay: true).insert(entry);
+    try {
+      overlay.insert(entry);
+    } catch (_) {
+      // If insertion fails due to timing, drop the entry safely
+      _entry = null;
+      return;
+    }
     _controller.forward();
   }
 
@@ -131,13 +168,10 @@ class _WordCardMenuState extends State<WordCardMenu>
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _link,
-      child: IconButton(
-        tooltip: 'More options',
-        icon: const Icon(Icons.more_vert),
-        onPressed: _toggleMenu,
-      ),
+    return IconButton(
+      tooltip: 'More options',
+      icon: const Icon(Icons.more_vert),
+      onPressed: _toggleMenu,
     );
   }
 }

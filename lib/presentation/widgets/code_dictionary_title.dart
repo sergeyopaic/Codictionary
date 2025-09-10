@@ -5,15 +5,15 @@ class CodeDictionaryTitle extends StatelessWidget {
     super.key,
     this.text = 'Codictionary',
     this.fontSize =
-        90, // NРїС—Р…?РїС—Р…?РїС—Р…???РїС—Р…NРїС—Р… N?NРїС—Р…??NРїС—Р…NРїС—Р…?РїС—Р… ?? AppBar
+        90, // NРїС—Р…?РїС—Р…?РїС—Р…РїС—Р…NРїС—Р… N?NРїС—Р…NРїС—Р…NРїС—Р…?РїС—Р…  AppBar
     this.strokeWidth = 3.0,
     this.strokeColor = const Color(0xCC000000),
     this.fillColor = Colors
-        .white, // NРїС—Р…???РїС—Р…NРїС—Р… ?РїС—Р…?РїС—Р…?РїС—Р…???????? NРїС—Р…?РїС—Р…??N?NРїС—Р…?РїС—Р…
+        .white, // NРїС—Р…РїС—Р…NРїС—Р… ?РїС—Р…?РїС—Р…?РїС—Р… NРїС—Р…?РїС—Р…N?NРїС—Р…?РїС—Р…
     this.imagePath = 'assets/images/cody.png',
     this.gap =
-        6.0, // ??NРїС—Р…N?NРїС—Р…N??? ???РїС—Р…?РїС—Р…??N? ???РїС—Р…N?????NРїС—Р…???? ?? NРїС—Р…?РїС—Р…??N?NРїС—Р…????
-    this.fontFamily, // 'CodictionaryCartoon' ?РїС—Р…N??РїС—Р…?? ?????РїС—Р…?РїС—Р…?????РїС—Р… N?NРїС—Р…??NРїС—Р…NРїС—Р…
+        6.0, // NРїС—Р…N?NРїС—Р…N РїС—Р…?РїС—Р…N? РїС—Р…NNРїС—Р…  NРїС—Р…?РїС—Р…N?NРїС—Р…
+    this.fontFamily, // 'CodictionaryCartoon' ?РїС—Р…NРїС—Р… РїС—Р…?РїС—Р…РїС—Р… N?NРїС—Р…NРїС—Р…NРїС—Р…
   });
 
   final String text;
@@ -27,16 +27,16 @@ class CodeDictionaryTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ??NРїС—Р…N???NРїС—Р…?РїС—Р… ???РїС—Р…NРїС—Р…NРїС—Р…???????? aРїС—Р…? ??NРїС—Р…N???NРїС—Р…?РїС—Р… NРїС—Р…?РїС—Р…??N?NРїС—Р…?РїС—Р… (NРїС—Р…N?NРїС—Р…N? ?РїС—Р…???РїС—Р…N?N??РїС—Р…, NРїС—Р…NРїС—Р…???РїС—Р…NРїС—Р… ?????РїС—Р…N??РїС—Р…?РїС—Р…N????? N????????РїС—Р…?РїС—Р…??)
+    // NРїС—Р…NNРїС—Р…?РїС—Р… РїС—Р…NРїС—Р…NРїС—Р… aРїС—Р…? NРїС—Р…NNРїС—Р…?РїС—Р… NРїС—Р…?РїС—Р…N?NРїС—Р…?РїС—Р… (NРїС—Р…N?NРїС—Р…N? ?РїС—Р…РїС—Р…N?NРїС—Р…, NРїС—Р…NРїС—Р…РїС—Р…NРїС—Р… РїС—Р…NРїС—Р…?РїС—Р…N NРїС—Р…?РїС—Р…)
     final double imageHeight = fontSize * 1.15;
 
     final TextStyle base = TextStyle(
       fontSize: fontSize,
       height:
-          1.0, // ???РїС—Р…??NРїС—Р…???РїС—Р…?РїС—Р… ????N??РїС—Р…?????РїС—Р…
+          1.0, // РїС—Р…NРїС—Р…РїС—Р…?РїС—Р… NРїС—Р…РїС—Р…
       letterSpacing: 6,
       fontFamily:
-          fontFamily, // 'CodictionaryCartoon' ?РїС—Р…N??РїС—Р…?? ?????????РїС—Р…NZNРїС—Р…???РїС—Р… N?NРїС—Р…??NРїС—Р…NРїС—Р…
+          fontFamily, // 'CodictionaryCartoon' ?РїС—Р…NРїС—Р… РїС—Р…NZNРїС—Р…РїС—Р… N?NРїС—Р…NРїС—Р…NРїС—Р…
       fontWeight: FontWeight.w700,
     );
 
@@ -59,7 +59,7 @@ class CodeDictionaryTitle extends StatelessWidget {
               overflow: TextOverflow.fade,
               softWrap: false,
             ),
-            // ?РїС—Р…?РїС—Р…?РїС—Р…???????РїС—Р…
+            // ?РїС—Р…?РїС—Р…?РїС—Р…РїС—Р…
             Text(
               text,
               style: base.copyWith(color: fillColor),
@@ -73,3 +73,4 @@ class CodeDictionaryTitle extends StatelessWidget {
     );
   }
 }
+

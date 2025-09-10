@@ -36,7 +36,11 @@ class DictionaryViewModel extends ChangeNotifier {
   Future<void> load({List<legacy_model.Word> seed = const []}) async {
     final list = await _getAll();
     if (list.isEmpty && seed.isNotEmpty) {
-      words = List.from(seed);
+      // Seed defaults and persist them via add use-case
+      words = List<legacy_model.Word>.from(seed);
+      for (final w in words) {
+        await _addWord(AddWordParams(id: w.id, source: w.eng, target: w.rus, note: w.desc));
+      }
     } else {
       words = list
           .map(
@@ -50,8 +54,38 @@ class DictionaryViewModel extends ChangeNotifier {
           )
           .toList();
     }
+    await _fixDuplicateOrEmptyIds();
     _applyFilter();
     notifyListeners();
+  }
+
+  Future<void> _fixDuplicateOrEmptyIds() async {
+    if (words.isEmpty) return;
+    final seen = <String>{};
+    final toPersist = <legacy_model.Word>[];
+    for (var i = 0; i < words.length; i++) {
+      final w = words[i];
+      var id = w.id;
+      final duplicate = id.isEmpty || seen.contains(id);
+      if (duplicate) {
+        id = const Uuid().v4();
+      }
+      seen.add(id);
+      if (duplicate) {
+        final fixed = legacy_model.Word(
+          id: id,
+          eng: w.eng,
+          rus: w.rus,
+          desc: w.desc,
+          descLong: w.descLong,
+          addedAt: w.addedAt,
+        );
+        words[i] = fixed;
+        toPersist.add(fixed);
+      }
+    }
+    // Avoid persisting here to prevent creating duplicates in storage.
+    // The corrected state will be saved on the next explicit add/edit.
   }
 
   void reorder(int oldIndex, int newIndex) {
@@ -83,6 +117,15 @@ class DictionaryViewModel extends ChangeNotifier {
   }
 
   int get selectedCount => selected.length;
+
+  bool get areAllSelected => selected.length == filtered.length && filtered.isNotEmpty;
+
+  void selectAll() {
+    selected
+      ..clear()
+      ..addAll(filtered.map((e) => e.id));
+    notifyListeners();
+  }
 
   Future<void> deleteSelected() async {
     if (selected.isEmpty) return;
@@ -221,7 +264,8 @@ class DictionaryViewModel extends ChangeNotifier {
     final id = const Uuid().v4();
     String? desc;
     try {
-      desc = await _gpt.explainWord(eng);
+      final text = await _gpt.explainWordShort(eng);
+      desc = text.replaceAll('*', '');
     } catch (_) {}
     words.add(
       legacy_model.Word(
@@ -251,7 +295,8 @@ class DictionaryViewModel extends ChangeNotifier {
     final changed = eng != original.eng || rus != original.rus;
     if (changed) {
       try {
-        desc = await _gpt.explainWord(eng);
+        final text = await _gpt.explainWordShort(eng);
+        desc = text.replaceAll('*', '');
       } catch (_) {}
     }
     words[index] = original.copyWith(eng: eng, rus: rus, desc: desc);
@@ -277,12 +322,34 @@ class DictionaryViewModel extends ChangeNotifier {
     await _removeWord(id);
   }
 
+  Future<void> restoreWord(legacy_model.Word w) async {
+    words.add(w);
+    _applyFilter();
+    notifyListeners();
+    await _addWord(
+      AddWordParams(id: w.id, source: w.eng, target: w.rus, note: w.desc),
+    );
+  }
+
+  Future<void> restoreWords(List<legacy_model.Word> list) async {
+    if (list.isEmpty) return;
+    for (final w in list) {
+      await restoreWord(w);
+    }
+  }
+
+  Future<String> translateToRu(String eng) async {
+    return _translate.translateToRu(eng);
+  }
+
   String currentDescription(int index) =>
       words[index].desc ?? 'Waiting for response...';
 
+  String? currentLongDescription(int index) => words[index].descLong;
+
   Future<String> regenerateDescription(int index) async {
     final eng = words[index].eng;
-    final text = await _gpt.explainWord(eng);
+    final text = (await _gpt.explainWordShort(eng)).replaceAll('*', '');
     words[index] = words[index].copyWith(desc: text);
     notifyListeners();
     await _addWord(
@@ -291,6 +358,23 @@ class DictionaryViewModel extends ChangeNotifier {
         source: words[index].eng,
         target: words[index].rus,
         note: text,
+      ),
+    );
+    return text;
+  }
+
+  Future<String> generateOrRegenerateLong(int index) async {
+    final eng = words[index].eng;
+    final text = (await _gpt.explainWordLong(eng)).replaceAll('*', '');
+    words[index] = words[index].copyWith(descLong: text);
+    notifyListeners();
+    // Persist the short via note as before; long is persisted in the model storage layer
+    await _addWord(
+      AddWordParams(
+        id: words[index].id,
+        source: words[index].eng,
+        target: words[index].rus,
+        note: words[index].desc,
       ),
     );
     return text;

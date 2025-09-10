@@ -5,6 +5,7 @@ class Word {
   final String eng;
   final String rus;
   final String? desc;
+  final String? descLong;
   final DateTime addedAt;
 
   Word({
@@ -12,15 +13,17 @@ class Word {
     required this.eng,
     required this.rus,
     this.desc,
+    this.descLong,
     required this.addedAt,
   });
 
-  Word copyWith({String? eng, String? rus, String? desc, DateTime? addedAt}) =>
+  Word copyWith({String? eng, String? rus, String? desc, String? descLong, DateTime? addedAt}) =>
       Word(
         id: id,
         eng: eng ?? this.eng,
         rus: rus ?? this.rus,
         desc: desc ?? this.desc,
+        descLong: descLong ?? this.descLong,
         addedAt: addedAt ?? this.addedAt,
       );
 
@@ -31,7 +34,9 @@ class Word {
         : const Uuid().v4();
     final eng = (m['eng'] ?? '') as String;
     final rus = (m['rus'] ?? '') as String;
-    final desc = m['desc'] as String?;
+    // Backward compatibility: original field was 'desc' (short). New optional 'descLong'.
+    final desc = (m['descShort'] as String?) ?? (m['desc'] as String?);
+    final descLong = m['descLong'] as String?;
 
     DateTime addedAt;
     final rawAddedAt = m['addedAt'];
@@ -46,14 +51,17 @@ class Word {
       addedAt = DateTime.now();
     }
 
-    return Word(id: id, eng: eng, rus: rus, desc: desc, addedAt: addedAt);
+    return Word(id: id, eng: eng, rus: rus, desc: desc, descLong: descLong, addedAt: addedAt);
   }
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'eng': eng,
     'rus': rus,
+    // Persist both: keep legacy 'desc' for short, and explicit 'descShort' + 'descLong'.
     if (desc != null) 'desc': desc,
+    if (desc != null) 'descShort': desc,
+    if (descLong != null) 'descLong': descLong,
     'addedAt': addedAt.toUtc().toIso8601String(),
   };
 }
