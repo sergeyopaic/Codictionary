@@ -17,27 +17,28 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
   final LayerLink _iconLink = LayerLink();
   OverlayEntry? _iconPickerEntry;
 
-  Widget _iconImage(String primaryPath, String altPath, double logicalWidth) {
+  Widget _iconImage(String path, double logicalWidth) {
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    final targetWidth = (logicalWidth * dpr).round();
+    final px = (logicalWidth * dpr).round();
+
     return Image.asset(
-      primaryPath,
+      path,
+      width: logicalWidth,
+      height: logicalWidth,
       fit: BoxFit.contain,
-      cacheWidth: targetWidth,
+      cacheWidth: px,
+      cacheHeight: px,
       filterQuality: FilterQuality.high,
-      errorBuilder: (context, error, stack) => Image.asset(
-        altPath,
-        fit: BoxFit.contain,
-        cacheWidth: targetWidth,
-        filterQuality: FilterQuality.high,
-        errorBuilder: (c, e, s) => const Icon(Icons.image_not_supported),
-      ),
+      errorBuilder: (_, __, ___) => const Icon(Icons.image_not_supported),
     );
   }
 
   void _showIconPickerOverlay() {
     if (_iconPickerEntry != null) return;
-    final paths = List.generate(14, (i) => 'assets/media/icons/new_dictionary/${i + 1}.png');
+    final paths = List.generate(
+      14,
+      (i) => 'assets/media/icons/new_dictionary/3.0x/${i + 1}.png',
+    );
     final overlay = Overlay.of(context);
     _iconPickerEntry = OverlayEntry(
       builder: (context) {
@@ -45,7 +46,10 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
           children: [
             // Tap outside to dismiss
             Positioned.fill(
-              child: GestureDetector(onTap: _hideIconPicker, behavior: HitTestBehavior.translucent),
+              child: GestureDetector(
+                onTap: _hideIconPicker,
+                behavior: HitTestBehavior.translucent,
+              ),
             ),
             CompositedTransformFollower(
               link: _iconLink,
@@ -55,30 +59,52 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                 color: Colors.transparent,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Theme.of(context).dividerColor),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        for (int i = 0; i < paths.length; i++)
-                          _IconChip(
-                            isSelected: selectedIcon == (i + 1),
-                            onTap: () {
-                              setState(() => selectedIcon = i + 1);
-                              _hideIconPicker();
-                            },
-                            child: _iconImage(
-                              paths[i],
-                              'assets/media/icons/${i + 1}.png',
-                              18,
+                  padding: const EdgeInsets.all(10),
+                  constraints: const BoxConstraints(
+                    maxWidth: 520,
+                    maxHeight: 360,
+                  ),
+                  child: GridView.builder(
+                    shrinkWrap: true,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 7,
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                        ),
+                    itemCount: paths.length,
+                    itemBuilder: (context, i) {
+                      final isSel = selectedIcon == (i + 1);
+                      return InkWell(
+                        onTap: () {
+                          setState(() => selectedIcon = i + 1);
+                          _hideIconPicker();
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSel
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).dividerColor,
+                              width: isSel ? 2 : 1,
                             ),
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                           ),
-                      ],
-                    ),
+                          padding: const EdgeInsets.all(6),
+                          child: _iconImage(paths[i], 44),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -153,16 +179,19 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                         width: 96,
                         height: 96,
                         decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Theme.of(context).dividerColor),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Theme.of(context).dividerColor,
+                          ),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(10),
                           child: _iconImage(
-                            'assets/media/icons/new_dictionary/${selectedIcon.toString()}.png',
-                            'assets/media/icons/${selectedIcon.toString()}.png',
-                            80,
+                            'assets/media/icons/new_dictionary/2.0x/$selectedIcon.png',
+                            76,
                           ),
                         ),
                       ),
@@ -193,7 +222,8 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
             Navigator.of(context).pop({
               'name': nameController.text.trim(),
               'description': descController.text.trim(),
-              'icon': 'assets/media/icons/new_dictionary/${selectedIcon.toString()}.png',
+              'icon':
+                  'assets/media/icons/new_dictionary/${selectedIcon.toString()}.png',
             });
           },
           child: const Text('Create'),
@@ -207,7 +237,11 @@ class _IconChip extends StatelessWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final Widget child;
-  const _IconChip({required this.isSelected, required this.onTap, required this.child});
+  const _IconChip({
+    required this.isSelected,
+    required this.onTap,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -361,10 +361,11 @@ class _DictionaryBodyState extends State<DictionaryView> {
                                   onPressed: vm.selectedCount == 0
                                       ? null
                                       : () async {
-                                          final ok = await showConfirmBulkDeleteDialog(
-                                            context,
-                                            vm.selectedCount,
-                                          );
+                                          final ok =
+                                              await showConfirmBulkDeleteDialog(
+                                                context,
+                                                vm.selectedCount,
+                                              );
                                           if (ok) {
                                             await vm.deleteSelected();
                                             vm.toggleSelectionMode(false);
@@ -720,4 +721,3 @@ class _DictionaryBodyState extends State<DictionaryView> {
         false;
   }
 }
-
