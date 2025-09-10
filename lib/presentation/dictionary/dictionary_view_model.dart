@@ -30,6 +30,7 @@ class DictionaryViewModel extends ChangeNotifier {
   final Set<String> removing = {};
   bool selectionMode = false;
   final Set<String> selected = {};
+  SortMode currentSort = SortMode.alphaAsc;
   Timer? _debounce;
 
   Future<void> load({List<legacy_model.Word> seed = const []}) async {
@@ -91,6 +92,28 @@ class DictionaryViewModel extends ChangeNotifier {
       await deleteById(id);
     }
     selected.clear();
+    notifyListeners();
+  }
+
+  void setSort(SortMode mode) {
+    currentSort = mode;
+    int cmpAlpha(legacy_model.Word a, legacy_model.Word b) {
+      final na = _normalizeEng(a.eng);
+      final nb = _normalizeEng(b.eng);
+      return na.compareTo(nb);
+    }
+    switch (mode) {
+      case SortMode.alphaAsc:
+        words.sort(cmpAlpha);
+        break;
+      case SortMode.alphaDesc:
+        words.sort((a, b) => -cmpAlpha(a, b));
+        break;
+      case SortMode.dateAdded:
+        words.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+        break;
+    }
+    _applyFilter();
     notifyListeners();
   }
 
@@ -273,3 +296,4 @@ class DictionaryViewModel extends ChangeNotifier {
     return text;
   }
 }
+enum SortMode { alphaAsc, alphaDesc, dateAdded }

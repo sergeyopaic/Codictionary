@@ -8,6 +8,10 @@ import '../dictionary/dictionary_view_model.dart';
 import '../../models/word.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 import '../vocabs/vocabs_view.dart';
+import '../core/widgets/animated_item_wrapper.dart';
+import '../dialogs/confirm_bulk_delete_dialog.dart';
+
+enum _SortOption { alphabetical, alphaDesc, dateAdded }
 
 class DictionaryView extends StatefulWidget {
   final List<Word> defaultWords;
@@ -66,6 +70,58 @@ class _DictionaryBodyState extends State<DictionaryView> {
             fontFamily: 'CodictionaryCartoon',
             imagePath: 'assets/media/CODY.png',
           ),
+          actions: [
+            PopupMenuButton<_SortOption>(
+              tooltip: 'Sort',
+              icon: const Icon(Icons.sort),
+              onSelected: (_SortOption value) {
+                switch (value) {
+                  case _SortOption.alphabetical:
+                    vm.setSort(SortMode.alphaAsc);
+                    break;
+                  case _SortOption.alphaDesc:
+                    vm.setSort(SortMode.alphaDesc);
+                    break;
+                  case _SortOption.dateAdded:
+                    vm.setSort(SortMode.dateAdded);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: _SortOption.alphabetical,
+                  child: Row(
+                    children: const [
+                      Icon(Icons.sort_by_alpha),
+                      SizedBox(width: 10),
+                      Text('Alphabetical'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _SortOption.alphaDesc,
+                  child: Row(
+                    children: const [
+                      Icon(Icons.sort_by_alpha),
+                      SizedBox(width: 10),
+                      Text('Alphabetical Z-A'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _SortOption.dateAdded,
+                  child: Row(
+                    children: const [
+                      Icon(Icons.schedule),
+                      SizedBox(width: 10),
+                      Text('Date added'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 4),
+          ],
         ),
         drawerScrimColor: Colors.black54,
         drawer: Builder(
@@ -152,72 +208,78 @@ class _DictionaryBodyState extends State<DictionaryView> {
                         child: AnimatedOpacity(
                           duration: const Duration(milliseconds: 200),
                           opacity: isRemoving ? 0.0 : 1.0,
-                          child: Card(
-                            elevation: 2,
-                            child: Stack(
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        word.eng,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
+                          child: AnimatedItemWrapper(
+                            switchKey: ValueKey(
+                              '${vm.currentSort.name}-${word.id}-$i',
+                            ),
+                            child: Card(
+                              elevation: 2,
+                              child: Stack(
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          word.eng,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        word.rus,
-                                        style: const TextStyle(fontSize: 14),
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const Spacer(),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: WordCardMenu(
-                                          onExplain: () => _showWordExplanation(
-                                            context,
-                                            vm,
-                                            i,
-                                          ),
-                                          onEdit: () => _showAddEditDialog(
-                                            context,
-                                            vm,
-                                            index: i,
-                                          ),
-                                          onDelete: () async {
-                                            final ok =
-                                                await _confirmDeleteDialog(
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          word.rus,
+                                          style: const TextStyle(fontSize: 14),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const Spacer(),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: WordCardMenu(
+                                            onExplain: () =>
+                                                _showWordExplanation(
                                                   context,
-                                                  word.eng,
-                                                );
-                                            if (ok) {
-                                              await vm.deleteById(word.id);
-                                            }
-                                          },
+                                                  vm,
+                                                  i,
+                                                ),
+                                            onEdit: () => _showAddEditDialog(
+                                              context,
+                                              vm,
+                                              index: i,
+                                            ),
+                                            onDelete: () async {
+                                              final ok =
+                                                  await _confirmDeleteDialog(
+                                                    context,
+                                                    word.eng,
+                                                  );
+                                              if (ok) {
+                                                await vm.deleteById(word.id);
+                                              }
+                                            },
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (vm.selectionMode)
-                                  Positioned(
-                                    left: 4,
-                                    bottom: 4,
-                                    child: Checkbox(
-                                      value: isSelected,
-                                      onChanged: (_) =>
-                                          vm.toggleSelect(word.id),
+                                      ],
                                     ),
                                   ),
-                              ],
+                                  if (vm.selectionMode)
+                                    Positioned(
+                                      left: 4,
+                                      bottom: 4,
+                                      child: Checkbox(
+                                        value: isSelected,
+                                        onChanged: (_) =>
+                                            vm.toggleSelect(word.id),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -299,11 +361,10 @@ class _DictionaryBodyState extends State<DictionaryView> {
                                   onPressed: vm.selectedCount == 0
                                       ? null
                                       : () async {
-                                          final ok =
-                                              await _confirmBulkDeleteDialog(
-                                                context,
-                                                vm.selectedCount,
-                                              );
+                                          final ok = await showConfirmBulkDeleteDialog(
+                                            context,
+                                            vm.selectedCount,
+                                          );
                                           if (ok) {
                                             await vm.deleteSelected();
                                             vm.toggleSelectionMode(false);
@@ -658,74 +719,5 @@ class _DictionaryBodyState extends State<DictionaryView> {
         )) ??
         false;
   }
-
-  Future<bool> _confirmBulkDeleteDialog(BuildContext context, int count) async {
-    final theme = Theme.of(context);
-    return (await showDialog<bool>(
-          context: context,
-          barrierDismissible: true,
-          builder: (context) {
-            return AlertDialog(
-              contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              content: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 84,
-                      child: FittedBox(
-                        fit: BoxFit.contain,
-                        child: Image.asset(
-                          'assets/media/cody_delete.png',
-                          filterQuality: FilterQuality.high,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Delete selected words?',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '$count item(s) will be removed from your dictionary.',
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () =>
-                      Navigator.of(context, rootNavigator: true).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton.icon(
-                  icon: const Icon(Icons.delete_outline),
-                  label: const Text('Delete'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: theme.colorScheme.error,
-                    foregroundColor: theme.colorScheme.onError,
-                  ),
-                  onPressed: () =>
-                      Navigator.of(context, rootNavigator: true).pop(true),
-                ),
-              ],
-            );
-          },
-        )) ??
-        false;
-  }
 }
+
