@@ -18,11 +18,11 @@ class DictionaryViewModel extends ChangeNotifier {
   final TranslateService _translate;
 
   DictionaryViewModel()
-      : _getAll = sl(),
-        _addWord = sl(),
-        _removeWord = sl(),
-        _gpt = sl(),
-        _translate = sl();
+    : _getAll = sl(),
+      _addWord = sl(),
+      _removeWord = sl(),
+      _gpt = sl(),
+      _translate = sl();
 
   List<legacy_model.Word> words = [];
   List<legacy_model.Word> filtered = [];
@@ -38,13 +38,15 @@ class DictionaryViewModel extends ChangeNotifier {
       words = List.from(seed);
     } else {
       words = list
-          .map((e) => legacy_model.Word(
-                id: e.id,
-                eng: e.source,
-                rus: e.target,
-                desc: e.note,
-                addedAt: DateTime.now(),
-              ))
+          .map(
+            (e) => legacy_model.Word(
+              id: e.id,
+              eng: e.source,
+              rus: e.target,
+              desc: e.note,
+              addedAt: DateTime.now(),
+            ),
+          )
           .toList();
     }
     _applyFilter();
@@ -103,9 +105,11 @@ class DictionaryViewModel extends ChangeNotifier {
       filtered = List.from(words);
     } else {
       filtered = words
-          .where((w) =>
-              w.eng.toLowerCase().contains(query) ||
-              w.rus.toLowerCase().contains(query))
+          .where(
+            (w) =>
+                w.eng.toLowerCase().contains(query) ||
+                w.rus.toLowerCase().contains(query),
+          )
           .toList();
     }
   }
@@ -118,15 +122,40 @@ class DictionaryViewModel extends ChangeNotifier {
   String _normalizeEng(String s) {
     String out = s.trim().toLowerCase();
     const Map<String, String> repl = {
-      'à': 'a', 'á': 'a', 'â': 'a', 'ä': 'a', 'ã': 'a', 'å': 'a', 'ā': 'a',
+      'à': 'a',
+      'á': 'a',
+      'â': 'a',
+      'ä': 'a',
+      'ã': 'a',
+      'å': 'a',
+      'ā': 'a',
       'ç': 'c',
-      'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e', 'ē': 'e',
-      'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i', 'ī': 'i',
+      'è': 'e',
+      'é': 'e',
+      'ê': 'e',
+      'ë': 'e',
+      'ē': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'î': 'i',
+      'ï': 'i',
+      'ī': 'i',
       'ñ': 'n',
-      'ò': 'o', 'ó': 'o', 'ô': 'o', 'ö': 'o', 'õ': 'o', 'ō': 'o',
-      'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u', 'ū': 'u',
-      'ý': 'y', 'ÿ': 'y',
-      'æ': 'ae', 'œ': 'oe',
+      'ò': 'o',
+      'ó': 'o',
+      'ô': 'o',
+      'ö': 'o',
+      'õ': 'o',
+      'ō': 'o',
+      'ù': 'u',
+      'ú': 'u',
+      'û': 'u',
+      'ü': 'u',
+      'ū': 'u',
+      'ý': 'y',
+      'ÿ': 'y',
+      'æ': 'ae',
+      'œ': 'oe',
     };
     final buffer = StringBuffer();
     for (final ch in out.split('')) {
@@ -155,7 +184,9 @@ class DictionaryViewModel extends ChangeNotifier {
       // Block if same English already exists in this vocabulary (primary key)
       if (_normalizeEng(w.eng) == nEng) return true;
       // Optionally also block if exact same pair already exists
-      if (_normalizeEng(w.eng) == nEng && _normalizeRus(w.rus) == nRus) return true;
+      if (_normalizeEng(w.eng) == nEng && _normalizeRus(w.rus) == nRus) {
+        return true;
+      }
       return false;
     });
   }
@@ -169,20 +200,26 @@ class DictionaryViewModel extends ChangeNotifier {
     try {
       desc = await _gpt.explainWord(eng);
     } catch (_) {}
-    words.add(legacy_model.Word(
-      id: id,
-      eng: eng,
-      rus: rus,
-      desc: desc,
-      addedAt: DateTime.now(),
-    ));
+    words.add(
+      legacy_model.Word(
+        id: id,
+        eng: eng,
+        rus: rus,
+        desc: desc,
+        addedAt: DateTime.now(),
+      ),
+    );
     _applyFilter();
     notifyListeners();
     await _addWord(AddWordParams(id: id, source: eng, target: rus, note: desc));
     return true;
   }
 
-  Future<bool> editWord(int index, {required String eng, required String rus}) async {
+  Future<bool> editWord(
+    int index, {
+    required String eng,
+    required String rus,
+  }) async {
     final original = words[index];
     if (_existsInCurrentVocab(eng, rus, exceptId: original.id)) {
       return false;
@@ -198,7 +235,9 @@ class DictionaryViewModel extends ChangeNotifier {
     _applyFilter();
     notifyListeners();
     // Persist via add use-case by same id (repository replaces/append)
-    await _addWord(AddWordParams(id: original.id, source: eng, target: rus, note: desc));
+    await _addWord(
+      AddWordParams(id: original.id, source: eng, target: rus, note: desc),
+    );
     return true;
   }
 
@@ -215,19 +254,22 @@ class DictionaryViewModel extends ChangeNotifier {
     await _removeWord(id);
   }
 
-  String currentDescription(int index) => words[index].desc ?? 'Waiting for response...';
+  String currentDescription(int index) =>
+      words[index].desc ?? 'Waiting for response...';
 
   Future<String> regenerateDescription(int index) async {
     final eng = words[index].eng;
     final text = await _gpt.explainWord(eng);
     words[index] = words[index].copyWith(desc: text);
     notifyListeners();
-    await _addWord(AddWordParams(
-      id: words[index].id,
-      source: words[index].eng,
-      target: words[index].rus,
-      note: text,
-    ));
+    await _addWord(
+      AddWordParams(
+        id: words[index].id,
+        source: words[index].eng,
+        target: words[index].rus,
+        note: text,
+      ),
+    );
     return text;
   }
 }

@@ -15,7 +15,8 @@ class Word {
     required this.addedAt,
   });
 
-  Word copyWith({String? eng, String? rus, String? desc, DateTime? addedAt}) => Word(
+  Word copyWith({String? eng, String? rus, String? desc, DateTime? addedAt}) =>
+      Word(
         id: id,
         eng: eng ?? this.eng,
         rus: rus ?? this.rus,
@@ -25,7 +26,9 @@ class Word {
 
   factory Word.fromMap(Map<String, dynamic> m) {
     final rawId = m['id'];
-    final id = (rawId is String && rawId.isNotEmpty) ? rawId : const Uuid().v4();
+    final id = (rawId is String && rawId.isNotEmpty)
+        ? rawId
+        : const Uuid().v4();
     final eng = (m['eng'] ?? '') as String;
     final rus = (m['rus'] ?? '') as String;
     final desc = m['desc'] as String?;
@@ -47,10 +50,10 @@ class Word {
   }
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'eng': eng,
-        'rus': rus,
-        if (desc != null) 'desc': desc,
-        'addedAt': addedAt.toUtc().toIso8601String(),
-      };
+    'id': id,
+    'eng': eng,
+    'rus': rus,
+    if (desc != null) 'desc': desc,
+    'addedAt': addedAt.toUtc().toIso8601String(),
+  };
 }

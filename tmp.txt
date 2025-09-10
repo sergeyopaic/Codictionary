@@ -1,137 +1,195 @@
-                        Expanded(child: Text(desc ?? 'No description. Tap "Regenerate text".')),
-                        IconButton(tooltip: 'Regenerate text', icon: const Icon(Icons.refresh), onPressed: generateDescription),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-                ElevatedButton(
-                  onPressed: () async {
-                    final eng = engController.text.trim();
-                    final rus = rusController.text.trim();
-                    if (eng.isEmpty || rus.isEmpty) return;
-                    if (isEdit) {
-                      final updated = words[index].copyWith(eng: eng, rus: rus, desc: desc);
-                      setState(() => words[index] = updated);
-                    } else {
-                      final newWord = Word(id: const Uuid().v4(), eng: eng, rus: rus, desc: desc);
-                      setState(() => words.add(newWord));
-                    }
-                    await widget.storage.saveWords(words);
-                    if (context.mounted) return;
-                    Navigator.of(context).pop();
-                  },
-                  child: Text(isEdit ? 'Save' : 'Add'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+import 'package:flutter/material.dart';
+
+/// A simple pop-up dialog for creating a new vocabulary.
+/// No persistence logic is included; caller may read the result and act later.
+class CreateVocabularyDialog extends StatefulWidget {
+  const CreateVocabularyDialog({super.key});
+
+  @override
+  State<CreateVocabularyDialog> createState() => _CreateVocabularyDialogState();
+}
+
+class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController descController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  int selectedIcon = 1;
+
+  List<String> get iconPaths => List.generate(
+    14,
+    (i) => 'assets/media/icons/new_dictionary/${i + 1}.png',
+  );
+
+  Widget _iconImage(String primaryPath, String altPath, double logicalWidth) {
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final targetWidth = (logicalWidth * dpr).round();
+    return Image.asset(
+      primaryPath,
+      fit: BoxFit.contain,
+      cacheWidth: targetWidth,
+      filterQuality: FilterQuality.high,
+      errorBuilder: (context, error, stack) => Image.asset(
+        altPath,
+        fit: BoxFit.contain,
+        cacheWidth: targetWidth,
+        filterQuality: FilterQuality.high,
+        errorBuilder: (c, e, s) => const Icon(Icons.image_not_supported),
+      ),
     );
   }
 
-  Future<void> _deleteWord(int index) async {
-    if (index < 0 || index >= words.length) return;
-    final word = words[index];
-    setState(() => words.removeAt(index));
-    await widget.storage.saveWords(words);
-    if (mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Deleted ${word.eng}')));
+  @override
+  void dispose() {
+    nameController.dispose();
+    descController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 90,
-        centerTitle: true,
-        title: const CodeDictionaryTitle(
-          fontSize: 56,
-          strokeWidth: 5,
-          fillColor: Color.fromARGB(255, 231, 255, 223),
-          strokeColor: Color(0xCC000000),
-          fontFamily: 'CodictionaryCartoon',
-          imagePath: 'assets/media/CODY.png',
-        ),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: searchController,
-              decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search...'),
-            ),
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                final columns = width.isFinite ? (width / 220).floor().clamp(1, 6) : 2;
-                return ReorderableGridView.builder(
-                  itemCount: filteredWords.length,
-                  onReorder: (oldIndex, newIndex) {
-                    setState(() {
-                      final item = filteredWords.removeAt(oldIndex);
-                      filteredWords.insert(newIndex, item);
-                      words = List<Word>.from(filteredWords);
-                    });
-                    widget.storage.saveWords(words);
-                  },
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.6,
+    return AlertDialog(
+      title: const Text('Create Vocabulary'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Name'),
+                textInputAction: TextInputAction.next,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Please enter a name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: descController,
+                decoration: const InputDecoration(
+                  labelText: 'Description (optional)',
+                ),
+                minLines: 1,
+                maxLines: 3,
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Icon',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: _iconImage(
+                        'assets/media/icons/new_dictionary/${selectedIcon.toString()}.png',
+                        'assets/media/icons/${selectedIcon.toString()}.png',
+                        56, // 72 - padding * 2 => approx content width
+                      ),
+                    ),
                   ),
-                  itemBuilder: (context, i) {
-                    final word = filteredWords[i];
-                    return ReorderableDelayedDragStartListener(
-                      key: ValueKey(word.id),
-                      index: i,
-                      child: Card(
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(word.eng, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                              const SizedBox(height: 6),
-                              Text(word.rus, style: const TextStyle(fontSize: 14), maxLines: 2, overflow: TextOverflow.ellipsis),
-                              const Spacer(),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Explain',
-                                    icon: const Icon(Icons.remove_red_eye),
-                                    onPressed: () { final idx = words.indexOf(word); if (idx >= 0) _showWordExplanation(context, idx); },
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Edit',
-                                    icon: const Icon(Icons.edit),
-                                    onPressed: () { final idx = words.indexOf(word); if (idx >= 0) _addOrEditWord(index: idx); },
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(Icons.delete),
-                                    onPressed: () { final idx = words.indexOf(word); if (idx >= 0) _deleteWord(idx); },
-                                  ),
-                                ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Tap an icon below to choose',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 84,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (int index = 0; index < iconPaths.length; index++)
+                        Padding(
+                          padding: EdgeInsets.only(
+                            right: index == iconPaths.length - 1 ? 0 : 8,
+                          ),
+                          child: InkWell(
+                            onTap: () =>
+                                setState(() => selectedIcon = index + 1),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              width: 84,
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: (selectedIcon == index + 1)
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).dividerColor,
+                                  width: (selectedIcon == index + 1) ? 2 : 1,
+                                ),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
                               ),
-                            ],
+                              child: _iconImage(
+                                iconPaths[index],
+                                'assets/media/icons/${index + 1}.png',
+                                72 - 12, // tile width 84 - padding 6*2
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) return;
+            Navigator.of(context).pop({
+              'name': nameController.text.trim(),
+              'description': descController.text.trim(),
+              'icon':
+                  'assets/media/icons/new_dictionary/'
+                  '${selectedIcon.toString()}.png',
+            });
+          },
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+Future<Map<String, String>?> showCreateVocabularyDialog(BuildContext context) {
+  return showDialog<Map<String, String>?>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => const CreateVocabularyDialog(),
+  );
+}
+

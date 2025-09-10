@@ -52,4 +52,5 @@ flutter:
     - .env
     - assets/dictionary.json
     - assets/media/
-
+    - assets/media/icons/
+    - assets/media/icons/new_dictionary/

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'create_vocabulary_dialog.dart';
 
 class VocabsView extends StatelessWidget {
   const VocabsView({super.key});
@@ -52,11 +53,22 @@ class VocabsView extends StatelessWidget {
           );
         },
       ),
-      body: const Center(child: Text('No vocabularies yet. Add one!')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: null,
-        icon: const Icon(Icons.add),
-        label: const Text('New Vocabulary'),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('No vocabularies yet.'),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () async {
+                // Open creation dialog; ignore result for now (no persistence yet)
+                await showCreateVocabularyDialog(context);
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Add one'),
+            ),
+          ],
+        ),
       ),
     );
   }

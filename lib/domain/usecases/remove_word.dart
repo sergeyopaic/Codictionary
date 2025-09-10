@@ -6,4 +6,3 @@ class RemoveWord {
 
   Future<void> call(String id) => repository.remove(id);
 }
-

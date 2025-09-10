@@ -7,4 +7,3 @@ class GetAllWords {
 
   Future<List<WordEntity>> call() => repository.getAll();
 }
-

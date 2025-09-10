@@ -20,8 +20,12 @@ class FileStorageService implements StorageService {
       if (raw.trim().isEmpty) return [];
       final decoded = (jsonDecode(raw) as List);
       final list = decoded.cast<Map<String, dynamic>>();
-      final needsSave = decoded.any((e) =>
-          e is Map && (e['addedAt'] == null || (e['addedAt'] as String?)?.isEmpty == true));
+      final needsSave = decoded.any(
+        (e) =>
+            e is Map &&
+            (e['addedAt'] == null ||
+                (e['addedAt'] as String?)?.isEmpty == true),
+      );
       final words = list.map(Word.fromMap).toList();
       if (needsSave) {
         // Backfill timestamps for pre-existing entries

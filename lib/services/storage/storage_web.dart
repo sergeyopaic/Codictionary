@@ -16,8 +16,12 @@ class WebStorageService implements StorageService {
       if (raw == null || raw.trim().isEmpty) return [];
       final decoded = (jsonDecode(raw) as List);
       final list = decoded.cast<Map<String, dynamic>>();
-      final needsSave = decoded.any((e) =>
-          e is Map && (e['addedAt'] == null || (e['addedAt'] as String?)?.isEmpty == true));
+      final needsSave = decoded.any(
+        (e) =>
+            e is Map &&
+            (e['addedAt'] == null ||
+                (e['addedAt'] as String?)?.isEmpty == true),
+      );
       final words = list.map(Word.fromMap).toList();
       if (needsSave) {
         // Persist backfilled timestamps
