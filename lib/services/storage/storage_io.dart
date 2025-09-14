@@ -47,6 +47,39 @@ class FileStorageService implements StorageService {
       // Ignore on failure to avoid crashing.
     }
   }
+
+  Future<File> _getVocabsFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/vocabularies.json');
+  }
+
+  @override
+  Future<List<Map<String, String>>> loadVocabularies() async {
+    try {
+      final file = await _getVocabsFile();
+      if (!await file.exists()) return [];
+      final raw = await file.readAsString();
+      if (raw.trim().isEmpty) return [];
+      final decoded = (jsonDecode(raw) as List).cast<Map>();
+      return decoded
+          .map((e) => {
+                'name': (e['name'] ?? '').toString(),
+                'description': (e['description'] ?? '').toString(),
+                'icon': (e['icon'] ?? '').toString(),
+              })
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<void> saveVocabularies(List<Map<String, String>> vocabs) async {
+    try {
+      final file = await _getVocabsFile();
+      await file.writeAsString(jsonEncode(vocabs));
+    } catch (_) {}
+  }
 }
 
 StorageService createStorageService() => FileStorageService();

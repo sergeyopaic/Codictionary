@@ -8,6 +8,7 @@ import 'storage_interface.dart';
 
 class WebStorageService implements StorageService {
   static const _key = 'codictionary_dictionary';
+  static const _vocabsKey = 'codictionary_vocabularies';
 
   @override
   Future<List<Word>> loadWords() async {
@@ -41,6 +42,31 @@ class WebStorageService implements StorageService {
     } catch (_) {
       // Ignore to avoid breaking UX.
     }
+  }
+
+  @override
+  Future<List<Map<String, String>>> loadVocabularies() async {
+    try {
+      final raw = html.window.localStorage[_vocabsKey];
+      if (raw == null || raw.trim().isEmpty) return [];
+      final decoded = (jsonDecode(raw) as List).cast<Map>();
+      return decoded
+          .map((e) => {
+                'name': (e['name'] ?? '').toString(),
+                'description': (e['description'] ?? '').toString(),
+                'icon': (e['icon'] ?? '').toString(),
+              })
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  @override
+  Future<void> saveVocabularies(List<Map<String, String>> vocabs) async {
+    try {
+      html.window.localStorage[_vocabsKey] = jsonEncode(vocabs);
+    } catch (_) {}
   }
 }
 

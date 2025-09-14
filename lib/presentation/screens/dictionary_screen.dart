@@ -211,12 +211,12 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            String _sanitize(String s) => s.replaceAll('*', '');
+            String sanitize(String s) => s.replaceAll('*', '');
             Future<void> regenerateShort() async {
               setState(() => shortAnswer = 'Loading...');
               try {
                 final eng = words[index].eng;
-                final newText = _sanitize(
+                final newText = sanitize(
                   await widget.gpt.explainWordShort(eng),
                 );
                 if (!context.mounted) return;
@@ -233,9 +233,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
               setState(() => longAnswer = 'Loading...');
               try {
                 final eng = words[index].eng;
-                final newText = _sanitize(
-                  await widget.gpt.explainWordLong(eng),
-                );
+                final newText = sanitize(await widget.gpt.explainWordLong(eng));
                 if (!context.mounted) return;
                 setState(() => longAnswer = newText);
                 words[index] = words[index].copyWith(descLong: newText);
@@ -251,9 +249,9 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                 'Explanation for "${words[index].eng}"',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
-                    ),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
               ),
               content: DefaultTabController(
                 length: 2,
@@ -291,7 +289,7 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
                                     child: TextButton(
                                       onPressed: regenerateShort,
                                       child: const Text('Regenerate short'),
-                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -732,4 +730,3 @@ class _DictionaryScreenState extends State<DictionaryScreen> {
     );
   }
 }
-

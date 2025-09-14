@@ -64,14 +64,10 @@ class _WordCardMenuState extends State<WordCardMenu>
   }
 
   void _showEntry() {
-    final overlay =
-        Overlay.of(context, rootOverlay: true) ?? Overlay.of(context);
-    if (overlay == null) return;
+    final overlay = Overlay.of(context, rootOverlay: true);
 
     final overlaySize = MediaQuery.of(context).size;
-    final targetBox = context.findRenderObject() as RenderBox?;
-    if (targetBox == null) return;
-    final targetTopLeft = targetBox.localToGlobal(Offset.zero);
+    final targetBox = context.findRenderObject() as RenderBox;
     final targetBottomRight = targetBox.localToGlobal(
       targetBox.size.bottomRight(Offset.zero),
     );

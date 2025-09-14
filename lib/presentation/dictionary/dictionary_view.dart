@@ -9,6 +9,7 @@ import '../widgets/word_card_menu.dart';
 import '../dialogs/confirm_delete_dialog.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
 import '../widgets/added_word_popup.dart' as toasts;
+import '../vocabs/vocabs_view.dart';
 
 class DictionaryView extends StatefulWidget {
   final List<Word> defaultWords;
@@ -53,7 +54,7 @@ class _DictionaryViewState extends State<DictionaryView> {
       builder: (context, _) {
         return Scaffold(
           appBar: vm.selectionMode
-               ? AppBar(
+              ? AppBar(
                   title: Text('${vm.selectedCount} selected'),
                   leading: IconButton(
                     tooltip: 'Close selection',
@@ -61,49 +62,56 @@ class _DictionaryViewState extends State<DictionaryView> {
                     onPressed: () => vm.toggleSelectionMode(false),
                   ),
                   actions: [
+                    IconButton(
+                      tooltip: vm.areAllSelected
+                          ? 'Clear selection'
+                          : 'Select all',
+                      icon: Icon(
+                        vm.areAllSelected
+                            ? Icons.select_all
+                            : Icons.select_all_outlined,
+                      ),
+                      onPressed: () {
+                        if (vm.areAllSelected) {
+                          vm.clearSelection();
+                        } else {
+                          vm.selectAll();
+                        }
+                      },
+                    ),
+                    if (vm.selectedCount > 0)
                       IconButton(
-                        tooltip: vm.areAllSelected ? 'Clear selection' : 'Select all',
-                        icon: Icon(vm.areAllSelected ? Icons.select_all : Icons.select_all_outlined),
-                        onPressed: () {
-                          if (vm.areAllSelected) {
-                            vm.clearSelection();
-                          } else {
-                            vm.selectAll();
+                        tooltip: 'Delete selected',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () async {
+                          final ok = await showConfirmBulkDeleteDialog(
+                            context,
+                            vm.selectedCount,
+                          );
+                          if (ok) {
+                            // Capture removed words before deletion for undo
+                            final removed = vm.words
+                                .where((w) => vm.selected.contains(w.id))
+                                .toList(growable: false);
+                            final count = removed.length;
+                            final messenger = ScaffoldMessenger.of(context);
+                            await vm.deleteSelected();
+                            if (!mounted) return;
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('$count word(s) deleted.'),
+                                action: SnackBarAction(
+                                  label: 'UNDO',
+                                  onPressed: () {
+                                    // Fire-and-forget restore
+                                    vm.restoreWords(removed);
+                                  },
+                                ),
+                              ),
+                            );
                           }
                         },
                       ),
-                      if (vm.selectedCount > 0)
-                        IconButton(
-                          tooltip: 'Delete selected',
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () async {
-                            final ok = await showConfirmBulkDeleteDialog(
-                              context,
-                              vm.selectedCount,
-                            );
-                            if (ok) {
-                              // Capture removed words before deletion for undo
-                              final removed = vm.words
-                                  .where((w) => vm.selected.contains(w.id))
-                                  .toList(growable: false);
-                              final count = removed.length;
-                              await vm.deleteSelected();
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('$count word(s) deleted.'),
-                                  action: SnackBarAction(
-                                    label: 'UNDO',
-                                    onPressed: () {
-                                      // Fire-and-forget restore
-                                      vm.restoreWords(removed);
-                                    },
-                                  ),
-                                ),
-                              );
-                            }
-                          },
-                        ),
                   ],
                 )
               : AppBar(
@@ -179,7 +187,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                             opacity: isRemoving ? 0.0 : 1.0,
                             child: InkWell(
                               onLongPress: () {
-                                if (!vm.selectionMode) vm.toggleSelectionMode(true);
+                                if (!vm.selectionMode) {
+                                  vm.toggleSelectionMode(true);
+                                }
                                 vm.toggleSelect(word.id);
                               },
                               onTap: () {
@@ -194,7 +204,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                                     shape: RoundedRectangleBorder(
                                       side: vm.selectionMode && isSelected
                                           ? BorderSide(
-                                              color: Theme.of(context).colorScheme.primary,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
                                               width: 2,
                                             )
                                           : BorderSide.none,
@@ -203,7 +215,8 @@ class _DictionaryViewState extends State<DictionaryView> {
                                     child: Padding(
                                       padding: const EdgeInsets.all(12),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             word.eng,
@@ -217,7 +230,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                                           const SizedBox(height: 6),
                                           Text(
                                             word.rus,
-                                            style: const TextStyle(fontSize: 14),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                            ),
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -226,29 +241,52 @@ class _DictionaryViewState extends State<DictionaryView> {
                                             alignment: Alignment.centerRight,
                                             child: WordCardMenu(
                                               onExplain: () {
-                                                final idx = vm.words.indexWhere((w) => w.id == word.id);
+                                                final idx = vm.words.indexWhere(
+                                                  (w) => w.id == word.id,
+                                                );
                                                 if (idx >= 0) {
-                                                  _showWordExplanation(context, vm, idx);
+                                                  _showWordExplanation(
+                                                    context,
+                                                    vm,
+                                                    idx,
+                                                  );
                                                 }
                                               },
                                               onEdit: () async {
-                                                final idx = vm.words.indexWhere((w) => w.id == word.id);
-                                                if (idx >= 0) await _addOrEditWord(vm: vm, index: idx);
+                                                final idx = vm.words.indexWhere(
+                                                  (w) => w.id == word.id,
+                                                );
+                                                if (idx >= 0) {
+                                                  await _addOrEditWord(
+                                                    vm: vm,
+                                                    index: idx,
+                                                  );
+                                                }
                                               },
                                               onDelete: () async {
-                                                final ok = await showConfirmDeleteDialog(context, word.eng);
+                                                final ok =
+                                                    await showConfirmDeleteDialog(
+                                                      context,
+                                                      word.eng,
+                                                    );
                                                 if (ok) {
                                                   // Keep a copy for undo
                                                   final removed = word;
                                                   await vm.deleteById(word.id);
                                                   if (!mounted) return;
-                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                  ScaffoldMessenger.of(
+                                                    context,
+                                                  ).showSnackBar(
                                                     SnackBar(
-                                                      content: Text('"${removed.eng}" deleted.'),
+                                                      content: Text(
+                                                        '"${removed.eng}" deleted.',
+                                                      ),
                                                       action: SnackBarAction(
                                                         label: 'UNDO',
                                                         onPressed: () {
-                                                          vm.restoreWord(removed);
+                                                          vm.restoreWord(
+                                                            removed,
+                                                          );
                                                         },
                                                       ),
                                                     ),
@@ -267,16 +305,24 @@ class _DictionaryViewState extends State<DictionaryView> {
                                       left: 6,
                                       child: AnimatedScale(
                                         scale: isSelected ? 1.0 : 0.9,
-                                        duration: const Duration(milliseconds: 150),
+                                        duration: const Duration(
+                                          milliseconds: 150,
+                                        ),
                                         child: CircleAvatar(
                                           radius: 12,
                                           backgroundColor: isSelected
-                                              ? Theme.of(context).colorScheme.primary
+                                              ? Theme.of(
+                                                  context,
+                                                ).colorScheme.primary
                                               : Colors.black12,
                                           child: Icon(
-                                            isSelected ? Icons.check : Icons.circle,
+                                            isSelected
+                                                ? Icons.check
+                                                : Icons.circle,
                                             size: 14,
-                                            color: isSelected ? Colors.white : Colors.white70,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : Colors.white70,
                                           ),
                                         ),
                                       ),
@@ -305,11 +351,18 @@ class _DictionaryViewState extends State<DictionaryView> {
     );
   }
 
-  Future<void> _addOrEditWord({required DictionaryViewModel vm, int? index}) async {
+  Future<void> _addOrEditWord({
+    required DictionaryViewModel vm,
+    int? index,
+  }) async {
     final isEdit = index != null;
     final editIndex = index ?? -1;
-    final engController = TextEditingController(text: isEdit ? vm.words[editIndex].eng : '');
-    final rusController = TextEditingController(text: isEdit ? vm.words[editIndex].rus : '');
+    final engController = TextEditingController(
+      text: isEdit ? vm.words[editIndex].eng : '',
+    );
+    final rusController = TextEditingController(
+      text: isEdit ? vm.words[editIndex].rus : '',
+    );
     final engFocus = FocusNode();
     final rusFocus = FocusNode();
     bool autoTranslate = true;
@@ -326,6 +379,7 @@ class _DictionaryViewState extends State<DictionaryView> {
         } catch (_) {}
       }
       setDialogState(() => isSaving = true);
+      final messenger = ScaffoldMessenger.of(context);
       bool success = false;
       if (isEdit) {
         final ok = await vm.editWord(editIndex, eng: eng, rus: rus);
@@ -333,27 +387,25 @@ class _DictionaryViewState extends State<DictionaryView> {
           didEdit = true;
           success = true;
         } else {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('This word already exists in this vocabulary.')),
-            );
-          }
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('This word already exists in this vocabulary.'),
+            ),
+          );
         }
       } else {
         final ok = await vm.addWord(eng: eng, rus: rus);
         if (ok) {
           success = true;
         } else {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('This word already exists in this vocabulary.')),
-            );
-          }
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('This word already exists in this vocabulary.'),
+            ),
+          );
         }
       }
-      if (context.mounted) {
-        setDialogState(() => isSaving = false);
-      }
+      setDialogState(() => isSaving = false);
       return success;
     }
 
@@ -393,7 +445,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                           if (rusController.text != translated) {
                             final newValue = TextEditingValue(
                               text: translated,
-                              selection: TextSelection.collapsed(offset: translated.length),
+                              selection: TextSelection.collapsed(
+                                offset: translated.length,
+                              ),
                             );
                             rusController.value = newValue;
                           }
@@ -419,7 +473,10 @@ class _DictionaryViewState extends State<DictionaryView> {
                   children: [
                     Checkbox(
                       value: autoTranslate,
-                      onChanged: isSaving ? null : (v) => setDialogState(() => autoTranslate = v ?? true),
+                      onChanged: isSaving
+                          ? null
+                          : (v) =>
+                                setDialogState(() => autoTranslate = v ?? true),
                     ),
                     const Text('Auto-translate'),
                   ],
@@ -428,7 +485,11 @@ class _DictionaryViewState extends State<DictionaryView> {
                   const SizedBox(height: 8),
                   Row(
                     children: const [
-                      SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
                       SizedBox(width: 10),
                       Text('Saving...'),
                     ],
@@ -438,7 +499,9 @@ class _DictionaryViewState extends State<DictionaryView> {
             ),
             actions: [
               TextButton(
-                onPressed: isSaving ? null : () => Navigator.of(context, rootNavigator: true).pop(),
+                onPressed: isSaving
+                    ? null
+                    : () => Navigator.of(context, rootNavigator: true).pop(),
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
@@ -448,7 +511,10 @@ class _DictionaryViewState extends State<DictionaryView> {
                         final ok = await save(setDialogState);
                         if (!context.mounted) return;
                         if (ok) {
-                          Navigator.of(context, rootNavigator: true).pop(!isEdit);
+                          Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).pop(!isEdit);
                         }
                       },
                 child: const Text('Save'),
@@ -465,13 +531,16 @@ class _DictionaryViewState extends State<DictionaryView> {
     }
     if (didEdit) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Word updated.')),
-      );
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(const SnackBar(content: Text('Word updated.')));
     }
   }
 
-  Future<void> _showWordExplanation(BuildContext context, DictionaryViewModel vm, int index) async {
+  Future<void> _showWordExplanation(
+    BuildContext context,
+    DictionaryViewModel vm,
+    int index,
+  ) async {
     if (index < 0 || index >= vm.words.length) return;
     String shortAnswer = vm.currentDescription(index);
     String? longAnswer = vm.currentLongDescription(index);
@@ -511,9 +580,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                 'Explanation for "${vm.words[index].eng}"',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
-                    ),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
               ),
               content: SizedBox(
                 width: double.maxFinite,
@@ -532,25 +601,33 @@ class _DictionaryViewState extends State<DictionaryView> {
                               Expanded(
                                 child: Builder(
                                   builder: (context) {
-                                    final bool hasLong =
-                                        (longAnswer != null && longAnswer!.trim().isNotEmpty && longAnswer != 'Loading...' && longAnswer != 'No detailed description yet.');
                                     final bool isDetailed = tabIndex == 1;
                                     // For Short tab: text only inside the container
                                     if (!isDetailed) {
                                       return _BookLikeContainer(
-                                        backgroundColor: const Color(0xFFFFF8E7),
+                                        backgroundColor: const Color(
+                                          0xFFFFF8E7,
+                                        ),
                                         borderColor: const Color(0xFFD9C9A3),
                                         spineColor: const Color(0xFFE0D2B6),
                                         child: Padding(
-                                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                                          padding: const EdgeInsets.fromLTRB(
+                                            16,
+                                            16,
+                                            16,
+                                            16,
+                                          ),
                                           child: Row(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Expanded(
                                                 child: SingleChildScrollView(
                                                   child: Text(
                                                     shortAnswer,
-                                                    style: const TextStyle(height: 1.35),
+                                                    style: const TextStyle(
+                                                      height: 1.35,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -559,7 +636,8 @@ class _DictionaryViewState extends State<DictionaryView> {
                                                 'assets/media/cody_info.png',
                                                 width: 120,
                                                 height: 120,
-                                                filterQuality: FilterQuality.high,
+                                                filterQuality:
+                                                    FilterQuality.high,
                                               ),
                                             ],
                                           ),
@@ -572,15 +650,24 @@ class _DictionaryViewState extends State<DictionaryView> {
                                       borderColor: const Color(0xFFB6D0F5),
                                       spineColor: const Color(0xFFC8DBF8),
                                       child: Padding(
-                                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          16,
+                                          16,
+                                          16,
+                                        ),
                                         child: Row(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Expanded(
                                               child: SingleChildScrollView(
                                                 child: Text(
-                                                  longAnswer ?? 'No detailed description yet.',
-                                                  style: const TextStyle(height: 1.35),
+                                                  longAnswer ??
+                                                      'No detailed description yet.',
+                                                  style: const TextStyle(
+                                                    height: 1.35,
+                                                  ),
                                                 ),
                                               ),
                                             ),
@@ -608,7 +695,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                                         icon: const Icon(Icons.autorenew),
                                       )
                                     : IconButton(
-                                        tooltip: (longAnswer == null || longAnswer == 'Loading...')
+                                        tooltip:
+                                            (longAnswer == null ||
+                                                longAnswer == 'Loading...')
                                             ? 'Generate a more detailed description'
                                             : 'Regenerate detailed description',
                                         onPressed: generateOrRegenerateLong,
@@ -628,7 +717,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                             onPressed: () => setState(() => tabIndex = 0),
                             icon: Icon(
                               Icons.flash_on,
-                              color: tabIndex == 0 ? Theme.of(context).colorScheme.primary : null,
+                              color: tabIndex == 0
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -637,7 +728,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                             onPressed: () => setState(() => tabIndex = 1),
                             icon: Icon(
                               Icons.article_outlined,
-                              color: tabIndex == 1 ? Theme.of(context).colorScheme.primary : null,
+                              color: tabIndex == 1
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
                             ),
                           ),
                         ],
@@ -671,17 +764,25 @@ class _DictionarySidebar extends StatelessWidget {
       child: SafeArea(
         child: ListView(
           padding: EdgeInsets.zero,
-          children: const [
-            DrawerHeader(
+          children: [
+            const DrawerHeader(
               child: Text(
                 'Menu',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
               ),
             ),
             ListTile(
+              leading: const Icon(Icons.library_add),
+              title: const Text('My vocabularies'),
+              onTap: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const VocabsView()));
+              },
+            ),
+            const Divider(),
+            const ListTile(
               leading: Icon(Icons.settings),
               title: Text('Settings'),
               enabled: false,
@@ -714,7 +815,11 @@ class _BookLikeContainer extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor, width: 1.2),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 6)),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 6),
+          ),
         ],
       ),
       child: Stack(
@@ -734,10 +839,7 @@ class _BookLikeContainer extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 14),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.only(left: 14), child: child),
         ],
       ),
     );

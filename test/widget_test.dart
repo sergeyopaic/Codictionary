@@ -23,6 +23,14 @@ class _MemoryStorageService implements StorageService {
   Future<void> saveWords(List<Word> words) async {
     _words = List.of(words);
   }
+
+  List<Map<String, String>> _vocabs = [];
+  @override
+  Future<List<Map<String, String>>> loadVocabularies() async => _vocabs;
+  @override
+  Future<void> saveVocabularies(List<Map<String, String>> vocabs) async {
+    _vocabs = List.of(vocabs);
+  }
 }
 
 void main() {
