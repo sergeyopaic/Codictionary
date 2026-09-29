@@ -1,15 +1,23 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
-import '../dictionary/dictionary_view_model.dart';
 import '../../models/word.dart';
-import '../widgets/code_dictionary_title.dart';
-import '../widgets/word_card_menu.dart';
-import '../dialogs/confirm_delete_dialog.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
+import '../dialogs/confirm_delete_dialog.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/added_word_popup.dart' as toasts;
-import '../vocabs/vocabs_view.dart';
+import '../widgets/brand_mark.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/theme_toggle_button.dart';
+import 'dictionary_view_model.dart';
+import 'widgets/dictionary_hero.dart';
+import 'widgets/selection_bar.dart';
+import 'widgets/word_card.dart';
+import 'widgets/word_details_sheet.dart';
+import 'widgets/word_editor_dialog.dart';
 
 class DictionaryView extends StatefulWidget {
   final List<Word> defaultWords;
@@ -20,15 +28,26 @@ class DictionaryView extends StatefulWidget {
 }
 
 class _DictionaryViewState extends State<DictionaryView> {
+  static const double _minCardWidth = 240;
+  static const double _cardHeight = 156;
+  static const double _gap = AppSpacing.lg;
+
   late final DictionaryViewModel vm;
   final TextEditingController _search = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   Timer? _debounce;
+  bool _loaded = false;
+
+  /// Sort chosen by the user; null while the grid is in manual order.
+  SortMode? _sort;
 
   @override
   void initState() {
     super.initState();
     vm = DictionaryViewModel();
-    vm.load(seed: widget.defaultWords);
+    vm.load(seed: widget.defaultWords).whenComplete(() {
+      if (mounted) setState(() => _loaded = true);
+    });
     _search.addListener(_onSearchChanged);
   }
 
@@ -43,708 +62,382 @@ class _DictionaryViewState extends State<DictionaryView> {
   void dispose() {
     _debounce?.cancel();
     _search.dispose();
+    _searchFocus.dispose();
     vm.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: vm,
-      builder: (context, _) {
-        return Scaffold(
-          appBar: vm.selectionMode
-              ? AppBar(
-                  title: Text('${vm.selectedCount} selected'),
-                  leading: IconButton(
-                    tooltip: 'Close selection',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => vm.toggleSelectionMode(false),
-                  ),
-                  actions: [
-                    IconButton(
-                      tooltip: vm.areAllSelected
-                          ? 'Clear selection'
-                          : 'Select all',
-                      icon: Icon(
-                        vm.areAllSelected
-                            ? Icons.select_all
-                            : Icons.select_all_outlined,
-                      ),
-                      onPressed: () {
-                        if (vm.areAllSelected) {
-                          vm.clearSelection();
-                        } else {
-                          vm.selectAll();
-                        }
-                      },
-                    ),
-                    if (vm.selectedCount > 0)
-                      IconButton(
-                        tooltip: 'Delete selected',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: () async {
-                          final ok = await showConfirmBulkDeleteDialog(
-                            context,
-                            vm.selectedCount,
-                          );
-                          if (ok) {
-                            // Capture removed words before deletion for undo
-                            final removed = vm.words
-                                .where((w) => vm.selected.contains(w.id))
-                                .toList(growable: false);
-                            final count = removed.length;
-                            final messenger = ScaffoldMessenger.of(context);
-                            await vm.deleteSelected();
-                            if (!mounted) return;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('$count word(s) deleted.'),
-                                action: SnackBarAction(
-                                  label: 'UNDO',
-                                  onPressed: () {
-                                    // Fire-and-forget restore
-                                    vm.restoreWords(removed);
-                                  },
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                  ],
-                )
-              : AppBar(
-                  toolbarHeight: 120,
-                  centerTitle: true,
-                  title: const CodeDictionaryTitle(
-                    fontSize: 90,
-                    strokeWidth: 4,
-                    fillColor: Color.fromARGB(255, 231, 255, 223),
-                    strokeColor: Color(0xCC000000),
-                    fontFamily: 'CodictionaryCartoon',
-                    imagePath: 'assets/media/CODY.png',
-                  ),
-                  actions: [
-                    IconButton(
-                      tooltip: 'Sort A-Z',
-                      onPressed: () => vm.setSort(SortMode.alphaAsc),
-                      icon: const Icon(Icons.sort_by_alpha),
-                    ),
-                    IconButton(
-                      tooltip: 'Sort Z-A',
-                      onPressed: () => vm.setSort(SortMode.alphaDesc),
-                      icon: const Icon(Icons.swap_vert),
-                    ),
-                    IconButton(
-                      tooltip: 'Sort by date',
-                      onPressed: () => vm.setSort(SortMode.dateAdded),
-                      icon: const Icon(Icons.schedule),
-                    ),
-                  ],
-                ),
-          drawerScrimColor: Colors.black54,
-          drawer: const _DictionarySidebar(),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: TextField(
-                  controller: _search,
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    hintText: 'Search...',
-                  ),
-                ),
-              ),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-                    final columns = width.isFinite
-                        ? (width / 220).floor().clamp(1, 6)
-                        : 2;
-                    return ReorderableGridView.builder(
-                      itemCount: vm.filtered.length,
-                      onReorder: (oldIndex, newIndex) {
-                        vm.reorder(oldIndex, newIndex);
-                      },
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                        childAspectRatio: 1.6,
-                      ),
-                      itemBuilder: (context, i) {
-                        final word = vm.filtered[i];
-                        final isRemoving = vm.removing.contains(word.id);
-                        final isSelected = vm.selected.contains(word.id);
-                        return ReorderableDelayedDragStartListener(
-                          key: ValueKey(word.id),
-                          index: i,
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 200),
-                            opacity: isRemoving ? 0.0 : 1.0,
-                            child: InkWell(
-                              onLongPress: () {
-                                if (!vm.selectionMode) {
-                                  vm.toggleSelectionMode(true);
-                                }
-                                vm.toggleSelect(word.id);
-                              },
-                              onTap: () {
-                                if (vm.selectionMode) {
-                                  vm.toggleSelect(word.id);
-                                }
-                              },
-                              child: Stack(
-                                children: [
-                                  Card(
-                                    elevation: 2,
-                                    shape: RoundedRectangleBorder(
-                                      side: vm.selectionMode && isSelected
-                                          ? BorderSide(
-                                              color: Theme.of(
-                                                context,
-                                              ).colorScheme.primary,
-                                              width: 2,
-                                            )
-                                          : BorderSide.none,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            word.eng,
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            word.rus,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          const Spacer(),
-                                          Align(
-                                            alignment: Alignment.centerRight,
-                                            child: WordCardMenu(
-                                              onExplain: () {
-                                                final idx = vm.words.indexWhere(
-                                                  (w) => w.id == word.id,
-                                                );
-                                                if (idx >= 0) {
-                                                  _showWordExplanation(
-                                                    context,
-                                                    vm,
-                                                    idx,
-                                                  );
-                                                }
-                                              },
-                                              onEdit: () async {
-                                                final idx = vm.words.indexWhere(
-                                                  (w) => w.id == word.id,
-                                                );
-                                                if (idx >= 0) {
-                                                  await _addOrEditWord(
-                                                    vm: vm,
-                                                    index: idx,
-                                                  );
-                                                }
-                                              },
-                                              onDelete: () async {
-                                                final ok =
-                                                    await showConfirmDeleteDialog(
-                                                      context,
-                                                      word.eng,
-                                                    );
-                                                if (ok) {
-                                                  // Keep a copy for undo
-                                                  final removed = word;
-                                                  await vm.deleteById(word.id);
-                                                  if (!mounted) return;
-                                                  ScaffoldMessenger.of(
-                                                    context,
-                                                  ).showSnackBar(
-                                                    SnackBar(
-                                                      content: Text(
-                                                        '"${removed.eng}" deleted.',
-                                                      ),
-                                                      action: SnackBarAction(
-                                                        label: 'UNDO',
-                                                        onPressed: () {
-                                                          vm.restoreWord(
-                                                            removed,
-                                                          );
-                                                        },
-                                                      ),
-                                                    ),
-                                                  );
-                                                }
-                                              },
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  if (vm.selectionMode)
-                                    Positioned(
-                                      top: 6,
-                                      left: 6,
-                                      child: AnimatedScale(
-                                        scale: isSelected ? 1.0 : 0.9,
-                                        duration: const Duration(
-                                          milliseconds: 150,
-                                        ),
-                                        child: CircleAvatar(
-                                          radius: 12,
-                                          backgroundColor: isSelected
-                                              ? Theme.of(
-                                                  context,
-                                                ).colorScheme.primary
-                                              : Colors.black12,
-                                          child: Icon(
-                                            isSelected
-                                                ? Icons.check
-                                                : Icons.circle,
-                                            size: 14,
-                                            color: isSelected
-                                                ? Colors.white
-                                                : Colors.white70,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () async {
-              await _addOrEditWord(vm: vm);
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('Add Word'),
-          ),
-        );
-      },
+  // ---------------------------------------------------------------------------
+  // Actions
+
+  Future<void> _addWord({String? initialEng}) async {
+    final added = await showWordEditorDialog(
+      context,
+      vm: vm,
+      initialEng: initialEng,
+    );
+    if (!added || !mounted) return;
+    final eng = vm.words.isEmpty ? null : vm.words.last.eng;
+    await toasts.showWordAddedPopup(context, word: eng);
+  }
+
+  Future<void> _editWord(String id) async {
+    final idx = vm.words.indexWhere((w) => w.id == id);
+    if (idx < 0) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await showWordEditorDialog(context, vm: vm, index: idx);
+    if (!saved) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Word updated.')));
+  }
+
+  Future<void> _deleteWord(Word word) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showConfirmDeleteDialog(context, word.eng);
+    if (!ok) return;
+    await vm.deleteById(word.id);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('"${word.eng}" deleted.'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => vm.restoreWord(word),
+        ),
+      ),
     );
   }
 
-  Future<void> _addOrEditWord({
-    required DictionaryViewModel vm,
-    int? index,
-  }) async {
-    final isEdit = index != null;
-    final editIndex = index ?? -1;
-    final engController = TextEditingController(
-      text: isEdit ? vm.words[editIndex].eng : '',
+  Future<void> _deleteSelected() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showConfirmBulkDeleteDialog(context, vm.selectedCount);
+    if (!ok) return;
+    // Capture removed words before deletion for undo
+    final removed = vm.words
+        .where((w) => vm.selected.contains(w.id))
+        .toList(growable: false);
+    await vm.deleteSelected();
+    vm.toggleSelectionMode(false);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          removed.length == 1
+              ? '1 word deleted.'
+              : '${removed.length} words deleted.',
+        ),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => vm.restoreWords(removed),
+        ),
+      ),
     );
-    final rusController = TextEditingController(
-      text: isEdit ? vm.words[editIndex].rus : '',
+  }
+
+  void _openDetails(Word word) {
+    showWordDetails(
+      context,
+      vm: vm,
+      wordId: word.id,
+      onEdit: () => _editWord(word.id),
+      onDelete: () => _deleteWord(word),
     );
-    final engFocus = FocusNode();
-    final rusFocus = FocusNode();
-    bool autoTranslate = true;
-    bool isSaving = false;
-    bool didEdit = false;
+  }
 
-    Future<bool> save(StateSetter setDialogState) async {
-      final eng = engController.text.trim();
-      String rus = rusController.text.trim();
-      if (eng.isEmpty) return false;
-      if (autoTranslate && rus.isEmpty) {
-        try {
-          rus = await vm.translateToRu(eng);
-        } catch (_) {}
-      }
-      setDialogState(() => isSaving = true);
-      final messenger = ScaffoldMessenger.of(context);
-      bool success = false;
-      if (isEdit) {
-        final ok = await vm.editWord(editIndex, eng: eng, rus: rus);
-        if (ok) {
-          didEdit = true;
-          success = true;
-        } else {
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('This word already exists in this vocabulary.'),
-            ),
-          );
-        }
-      } else {
-        final ok = await vm.addWord(eng: eng, rus: rus);
-        if (ok) {
-          success = true;
-        } else {
-          messenger.showSnackBar(
-            const SnackBar(
-              content: Text('This word already exists in this vocabulary.'),
-            ),
-          );
-        }
-      }
-      setDialogState(() => isSaving = false);
-      return success;
-    }
+  void _setSort(SortMode? mode) {
+    setState(() => _sort = mode);
+    if (mode != null) vm.setSort(mode);
+  }
 
-    final added = await showDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      builder: (_) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: Text(isEdit ? 'Edit Word' : 'Add Word'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: engController,
-                  focusNode: engFocus,
-                  autofocus: true,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(labelText: 'English'),
-                  onSubmitted: (_) async {
-                    final ok = await save(setDialogState);
-                    if (!context.mounted) return;
-                    if (ok) {
-                      Navigator.pop(context, isEdit ? null : true);
-                    }
-                  },
-                  onChanged: (text) async {
-                    if (!autoTranslate) return;
-                    final trimmed = text.trim();
-                    _debounce?.cancel();
-                    if (trimmed.isEmpty) return;
-                    _debounce = Timer(
-                      const Duration(milliseconds: 500),
-                      () async {
-                        try {
-                          final translated = await vm.translateToRu(trimmed);
-                          if (rusController.text != translated) {
-                            final newValue = TextEditingValue(
-                              text: translated,
-                              selection: TextSelection.collapsed(
-                                offset: translated.length,
-                              ),
-                            );
-                            rusController.value = newValue;
-                          }
-                        } catch (_) {}
-                      },
-                    );
-                  },
+  // ---------------------------------------------------------------------------
+  // Build
+
+  @override
+  Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): _addWord,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _searchFocus.requestFocus,
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (vm.selectionMode) vm.toggleSelectionMode(false);
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: ListenableBuilder(
+          listenable: vm,
+          builder: (context, _) => _buildScaffold(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
+    final wide = AppBreakpoints.isWide(context);
+    final pad = wide ? AppSpacing.xxl : AppSpacing.lg;
+    final explained = vm.words
+        .where((w) => w.desc != null && w.desc!.trim().isNotEmpty)
+        .length;
+
+    return Scaffold(
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: AppBreakpoints.maxContentWidth,
                 ),
-                TextField(
-                  controller: rusController,
-                  focusNode: rusFocus,
-                  decoration: const InputDecoration(labelText: 'Russian'),
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) async {
-                    final ok = await save(setDialogState);
-                    if (!context.mounted) return;
-                    if (ok) {
-                      Navigator.pop(context, isEdit ? null : true);
-                    }
-                  },
-                ),
-                Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Checkbox(
-                      value: autoTranslate,
-                      onChanged: isSaving
-                          ? null
-                          : (v) =>
-                                setDialogState(() => autoTranslate = v ?? true),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(pad, pad, pad, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (!wide) ...[
+                            const Row(
+                              children: [
+                                Expanded(child: BrandMark(size: 36)),
+                                ThemeToggleButton(),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.lg),
+                          ],
+                          DictionaryHero(
+                            total: vm.words.length,
+                            explained: explained,
+                            compact: !wide,
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                          _buildToolbar(context, wide),
+                          const SizedBox(height: AppSpacing.lg),
+                        ],
+                      ),
                     ),
-                    const Text('Auto-translate'),
+                    Expanded(child: _buildContent(context, pad)),
                   ],
                 ),
-                if (isSaving) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: const [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 10),
-                      Text('Saving...'),
-                    ],
-                  ),
-                ],
-              ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: isSaving
-                    ? null
-                    : () => Navigator.of(context, rootNavigator: true).pop(),
-                child: const Text('Cancel'),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: AppSpacing.xl,
+              child: Center(
+                child: SelectionBar(
+                  visible: vm.selectionMode,
+                  selectedCount: vm.selectedCount,
+                  allSelected: vm.areAllSelected,
+                  onClose: () => vm.toggleSelectionMode(false),
+                  onToggleAll: vm.areAllSelected
+                      ? vm.clearSelection
+                      : vm.selectAll,
+                  onDelete: _deleteSelected,
+                ),
               ),
-              ElevatedButton(
-                onPressed: isSaving
-                    ? null
-                    : () async {
-                        final ok = await save(setDialogState);
-                        if (!context.mounted) return;
-                        if (ok) {
-                          Navigator.of(
-                            context,
-                            rootNavigator: true,
-                          ).pop(!isEdit);
-                        }
-                      },
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: AnimatedScale(
+        scale: vm.selectionMode ? 0 : 1,
+        duration: AppMotion.medium,
+        curve: AppMotion.emphasized,
+        child: FloatingActionButton.extended(
+          tooltip: 'Add word (Ctrl+N)',
+          onPressed: vm.selectionMode ? null : _addWord,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add word'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildToolbar(BuildContext context, bool wide) {
+    final search = ListenableBuilder(
+      listenable: _search,
+      builder: (context, _) => SearchBar(
+        controller: _search,
+        focusNode: _searchFocus,
+        hintText: wide
+            ? 'Search words or translations  (Ctrl+F)'
+            : 'Search words',
+        leading: const Icon(Icons.search_rounded),
+        trailing: [
+          if (_search.text.isNotEmpty)
+            IconButton(
+              tooltip: 'Clear',
+              onPressed: _search.clear,
+              icon: const Icon(Icons.close_rounded),
+            ),
+          if (!wide) _SortMenu(value: _sort, onChanged: _setSort),
+          if (!wide) _selectButton(),
+        ],
       ),
     );
 
-    if (added == true) {
-      if (!mounted) return;
-      await toasts.showWordAddedPopup(context);
-    }
-    if (didEdit) {
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.showSnackBar(const SnackBar(content: Text('Word updated.')));
-    }
+    if (!wide) return search;
+
+    return Row(
+      children: [
+        Expanded(child: search),
+        const SizedBox(width: AppSpacing.md),
+        SegmentedButton<SortMode>(
+          emptySelectionAllowed: true,
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            minimumSize: WidgetStatePropertyAll(Size(0, 52)),
+          ),
+          segments: const [
+            ButtonSegment(
+              value: SortMode.alphaAsc,
+              icon: Icon(Icons.arrow_downward_rounded, size: 18),
+              label: Text('A–Z'),
+              tooltip: 'Sort A to Z',
+            ),
+            ButtonSegment(
+              value: SortMode.alphaDesc,
+              icon: Icon(Icons.arrow_upward_rounded, size: 18),
+              label: Text('Z–A'),
+              tooltip: 'Sort Z to A',
+            ),
+            ButtonSegment(
+              value: SortMode.dateAdded,
+              icon: Icon(Icons.schedule_rounded, size: 18),
+              label: Text('Recent'),
+              tooltip: 'Newest first',
+            ),
+          ],
+          selected: {?_sort},
+          onSelectionChanged: (s) => _setSort(s.isEmpty ? null : s.first),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        _selectButton(),
+      ],
+    );
   }
 
-  Future<void> _showWordExplanation(
-    BuildContext context,
-    DictionaryViewModel vm,
-    int index,
-  ) async {
-    if (index < 0 || index >= vm.words.length) return;
-    String shortAnswer = vm.currentDescription(index);
-    String? longAnswer = vm.currentLongDescription(index);
-    int tabIndex = 0;
+  Widget _selectButton() {
+    return IconButton(
+      tooltip: vm.selectionMode ? 'Done selecting' : 'Select words',
+      isSelected: vm.selectionMode,
+      onPressed: vm.words.isEmpty
+          ? null
+          : () => vm.toggleSelectionMode(!vm.selectionMode),
+      icon: const Icon(Icons.checklist_rounded),
+    );
+  }
 
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            Future<void> regenerateShort() async {
-              setState(() => shortAnswer = 'Loading...');
-              try {
-                final newText = await vm.regenerateDescription(index);
-                if (!context.mounted) return;
-                setState(() => shortAnswer = newText);
-              } catch (e) {
-                if (!context.mounted) return;
-                setState(() => shortAnswer = 'Error: $e');
-              }
-            }
+  Widget _buildContent(BuildContext context, double pad) {
+    if (!_loaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (vm.words.isEmpty) {
+      return EmptyState(
+        image: CodyArt.standing,
+        title: 'Your dictionary is empty',
+        message:
+            'Add your first word — Cody will translate it and explain how '
+            'it\'s used.',
+        action: FilledButton.icon(
+          onPressed: _addWord,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add your first word'),
+        ),
+      );
+    }
+    if (vm.filtered.isEmpty) {
+      final q = _search.text.trim();
+      return EmptyState(
+        image: CodyArt.reading,
+        title: 'No matches',
+        message:
+            'Nothing found for "$q". Try another spelling or add it as a '
+            'new word.',
+        action: FilledButton.tonalIcon(
+          onPressed: () => _addWord(initialEng: q),
+          icon: const Icon(Icons.add_rounded),
+          label: Text('Add "$q"'),
+        ),
+      );
+    }
 
-            Future<void> generateOrRegenerateLong() async {
-              setState(() => longAnswer = 'Loading...');
-              try {
-                final newText = await vm.generateOrRegenerateLong(index);
-                if (!context.mounted) return;
-                setState(() => longAnswer = newText);
-              } catch (e) {
-                if (!context.mounted) return;
-                setState(() => longAnswer = 'Error: $e');
-              }
-            }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth - pad * 2;
+        final columns = ((available + _gap) / (_minCardWidth + _gap))
+            .floor()
+            .clamp(1, 6);
+        final radius = BorderRadius.circular(AppRadius.lg);
+        final scheme = Theme.of(context).colorScheme;
 
-            return AlertDialog(
-              title: Text(
-                'Explanation for "${vm.words[index].eng}"',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SizedBox(
-                  height: 520,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 12, right: 12),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Builder(
-                                  builder: (context) {
-                                    final bool isDetailed = tabIndex == 1;
-                                    // For Short tab: text only inside the container
-                                    if (!isDetailed) {
-                                      return _BookLikeContainer(
-                                        backgroundColor: const Color(
-                                          0xFFFFF8E7,
-                                        ),
-                                        borderColor: const Color(0xFFD9C9A3),
-                                        spineColor: const Color(0xFFE0D2B6),
-                                        child: Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            16,
-                                            16,
-                                            16,
-                                          ),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: SingleChildScrollView(
-                                                  child: Text(
-                                                    shortAnswer,
-                                                    style: const TextStyle(
-                                                      height: 1.35,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Image.asset(
-                                                'assets/media/cody_info.png',
-                                                width: 120,
-                                                height: 120,
-                                                filterQuality:
-                                                    FilterQuality.high,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    }
-                                    // For Detailed tab: place the image inside the container on the right if content exists
-                                    return _BookLikeContainer(
-                                      backgroundColor: const Color(0xFFEFF6FF),
-                                      borderColor: const Color(0xFFB6D0F5),
-                                      spineColor: const Color(0xFFC8DBF8),
-                                      child: Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          16,
-                                          16,
-                                          16,
-                                          16,
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: SingleChildScrollView(
-                                                child: Text(
-                                                  longAnswer ??
-                                                      'No detailed description yet.',
-                                                  style: const TextStyle(
-                                                    height: 1.35,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Image.asset(
-                                              'assets/media/cody_info.png',
-                                              width: 120,
-                                              height: 120,
-                                              filterQuality: FilterQuality.high,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: tabIndex == 0
-                                    ? IconButton(
-                                        tooltip: 'Regenerate short',
-                                        onPressed: regenerateShort,
-                                        icon: const Icon(Icons.autorenew),
-                                      )
-                                    : IconButton(
-                                        tooltip:
-                                            (longAnswer == null ||
-                                                longAnswer == 'Loading...')
-                                            ? 'Generate a more detailed description'
-                                            : 'Regenerate detailed description',
-                                        onPressed: generateOrRegenerateLong,
-                                        icon: const Icon(Icons.autorenew),
-                                      ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Column(
-                        mainAxisSize: MainAxisSize.max,
-                        children: [
-                          IconButton(
-                            tooltip: 'Short',
-                            onPressed: () => setState(() => tabIndex = 0),
-                            icon: Icon(
-                              Icons.flash_on,
-                              color: tabIndex == 0
-                                  ? Theme.of(context).colorScheme.primary
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          IconButton(
-                            tooltip: 'Detailed',
-                            onPressed: () => setState(() => tabIndex = 1),
-                            icon: Icon(
-                              Icons.article_outlined,
-                              color: tabIndex == 1
-                                  ? Theme.of(context).colorScheme.primary
-                                  : null,
-                            ),
-                          ),
-                        ],
+        return ReorderableGridView.builder(
+          padding: EdgeInsets.fromLTRB(pad, AppSpacing.xs, pad, 120),
+          itemCount: vm.filtered.length,
+          dragEnabled: !vm.selectionMode,
+          onReorder: (oldIndex, newIndex) {
+            setState(() => _sort = null);
+            vm.reorder(oldIndex, newIndex);
+          },
+          dragWidgetBuilderV2: DragWidgetBuilderV2(
+            builder: (index, child, _) => Material(
+              type: MaterialType.transparency,
+              child: Transform.scale(
+                scale: 1.04,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.shadow.withValues(alpha: 0.25),
+                        blurRadius: 32,
+                        offset: const Offset(0, 16),
                       ),
                     ],
                   ),
+                  child: child,
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
+            ),
+          ),
+          placeholderBuilder: (_, _, _) => DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              color: scheme.primaryContainer.withValues(alpha: 0.35),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: 0.5),
+                width: 2,
+              ),
+            ),
+          ),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: _gap,
+            mainAxisSpacing: _gap,
+            mainAxisExtent: _cardHeight,
+          ),
+          itemBuilder: (context, i) {
+            final word = vm.filtered[i];
+            final removing = vm.removing.contains(word.id);
+            return AnimatedScale(
+              key: ValueKey(word.id),
+              scale: removing ? 0.9 : 1,
+              duration: AppMotion.medium,
+              child: AnimatedOpacity(
+                opacity: removing ? 0 : 1,
+                duration: AppMotion.medium,
+                child: WordCard(
+                  word: word,
+                  selectionMode: vm.selectionMode,
+                  selected: vm.selected.contains(word.id),
+                  onTap: () => _openDetails(word),
+                  onToggleSelect: () => vm.toggleSelect(word.id),
+                  onExplain: () => _openDetails(word),
+                  onEdit: () => _editWord(word.id),
+                  onDelete: () => _deleteWord(word),
                 ),
-              ],
+              ),
             );
           },
         );
@@ -753,94 +446,35 @@ class _DictionaryViewState extends State<DictionaryView> {
   }
 }
 
-class _DictionarySidebar extends StatelessWidget {
-  const _DictionarySidebar();
+class _SortMenu extends StatelessWidget {
+  const _SortMenu({required this.value, required this.onChanged});
+
+  final SortMode? value;
+  final ValueChanged<SortMode?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.of(context).size.width * 0.25;
-    return Drawer(
-      width: width.clamp(240.0, 420.0),
-      child: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            const DrawerHeader(
-              child: Text(
-                'Menu',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.library_add),
-              title: const Text('My vocabularies'),
-              onTap: () {
-                Navigator.of(context).pop();
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const VocabsView()));
-              },
-            ),
-            const Divider(),
-            const ListTile(
-              leading: Icon(Icons.settings),
-              title: Text('Settings'),
-              enabled: false,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+    Widget item(SortMode mode, IconData icon, String label) {
+      return MenuItemButton(
+        leadingIcon: Icon(icon),
+        trailingIcon: value == mode ? const Icon(Icons.check_rounded) : null,
+        onPressed: () => onChanged(value == mode ? null : mode),
+        child: Text(label),
+      );
+    }
 
-class _BookLikeContainer extends StatelessWidget {
-  const _BookLikeContainer({
-    required this.child,
-    required this.backgroundColor,
-    required this.borderColor,
-    required this.spineColor,
-  });
-
-  final Widget child;
-  final Color backgroundColor;
-  final Color borderColor;
-  final Color spineColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            offset: Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: Container(
-              width: 10,
-              decoration: BoxDecoration(
-                color: spineColor,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(14),
-                  bottomLeft: Radius.circular(14),
-                ),
-              ),
-            ),
-          ),
-          Padding(padding: const EdgeInsets.only(left: 14), child: child),
-        ],
+    return MenuAnchor(
+      menuChildren: [
+        item(SortMode.alphaAsc, Icons.arrow_downward_rounded, 'A to Z'),
+        item(SortMode.alphaDesc, Icons.arrow_upward_rounded, 'Z to A'),
+        item(SortMode.dateAdded, Icons.schedule_rounded, 'Newest first'),
+      ],
+      builder: (context, controller, _) => IconButton(
+        tooltip: 'Sort',
+        isSelected: value != null,
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(Icons.sort_rounded),
       ),
     );
   }

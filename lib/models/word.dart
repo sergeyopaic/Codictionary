@@ -17,15 +17,20 @@ class Word {
     required this.addedAt,
   });
 
-  Word copyWith({String? eng, String? rus, String? desc, String? descLong, DateTime? addedAt}) =>
-      Word(
-        id: id,
-        eng: eng ?? this.eng,
-        rus: rus ?? this.rus,
-        desc: desc ?? this.desc,
-        descLong: descLong ?? this.descLong,
-        addedAt: addedAt ?? this.addedAt,
-      );
+  Word copyWith({
+    String? eng,
+    String? rus,
+    String? desc,
+    String? descLong,
+    DateTime? addedAt,
+  }) => Word(
+    id: id,
+    eng: eng ?? this.eng,
+    rus: rus ?? this.rus,
+    desc: desc ?? this.desc,
+    descLong: descLong ?? this.descLong,
+    addedAt: addedAt ?? this.addedAt,
+  );
 
   factory Word.fromMap(Map<String, dynamic> m) {
     final rawId = m['id'];
@@ -51,7 +56,14 @@ class Word {
       addedAt = DateTime.now();
     }
 
-    return Word(id: id, eng: eng, rus: rus, desc: desc, descLong: descLong, addedAt: addedAt);
+    return Word(
+      id: id,
+      eng: eng,
+      rus: rus,
+      desc: desc,
+      descLong: descLong,
+      addedAt: addedAt,
+    );
   }
 
   Map<String, dynamic> toMap() => {

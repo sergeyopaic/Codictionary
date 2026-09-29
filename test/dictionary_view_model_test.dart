@@ -34,7 +34,7 @@ class _FakeRepo implements WordRepository {
 class _FakeGpt extends GptService {
   _FakeGpt() : super('');
   @override
-  Future<String> explainWord(String word) async => 'desc:$word';
+  Future<String> explainWordShort(String word) async => 'desc:$word';
 }
 
 class _FakeTranslate extends TranslateService {

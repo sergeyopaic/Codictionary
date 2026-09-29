@@ -62,11 +62,13 @@ class FileStorageService implements StorageService {
       if (raw.trim().isEmpty) return [];
       final decoded = (jsonDecode(raw) as List).cast<Map>();
       return decoded
-          .map((e) => {
-                'name': (e['name'] ?? '').toString(),
-                'description': (e['description'] ?? '').toString(),
-                'icon': (e['icon'] ?? '').toString(),
-              })
+          .map(
+            (e) => {
+              'name': (e['name'] ?? '').toString(),
+              'description': (e['description'] ?? '').toString(),
+              'icon': (e['icon'] ?? '').toString(),
+            },
+          )
           .toList();
     } catch (_) {
       return [];

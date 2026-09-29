@@ -51,11 +51,13 @@ class WebStorageService implements StorageService {
       if (raw == null || raw.trim().isEmpty) return [];
       final decoded = (jsonDecode(raw) as List).cast<Map>();
       return decoded
-          .map((e) => {
-                'name': (e['name'] ?? '').toString(),
-                'description': (e['description'] ?? '').toString(),
-                'icon': (e['icon'] ?? '').toString(),
-              })
+          .map(
+            (e) => {
+              'name': (e['name'] ?? '').toString(),
+              'description': (e['description'] ?? '').toString(),
+              'icon': (e['icon'] ?? '').toString(),
+            },
+          )
           .toList();
     } catch (_) {
       return [];

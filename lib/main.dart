@@ -8,7 +8,9 @@ import 'services/storage_service.dart';
 import 'services/translate_service.dart';
 import 'core/di/initial_bindings.dart';
 import 'core/di/service_locator.dart';
-import 'presentation/dictionary/dictionary_view.dart';
+import 'presentation/shell/app_shell.dart';
+import 'presentation/theme/app_theme.dart';
+import 'presentation/theme/theme_controller.dart';
 
 late String? apiKey;
 late String? deeplApiKey;
@@ -47,7 +49,7 @@ Future<void> main() async {
   );
 }
 
-/// Root widget that wires services and hosts the DictionaryScreen.
+/// Root widget that wires services and hosts the adaptive [AppShell].
 class MyApp extends StatelessWidget {
   const MyApp({
     super.key,
@@ -65,6 +67,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Ensure DI also works when main() wasn't run (e.g., widget tests)
+    if (!sl.isRegistered<StorageService>()) {
+      sl.registerLazySingleton<StorageService>(() => storage);
+    }
     registerInitialDependenciesSync();
     if (!sl.isRegistered<GptService>()) {
       sl.registerLazySingleton<GptService>(() => gpt);
@@ -72,18 +77,16 @@ class MyApp extends StatelessWidget {
     if (!sl.isRegistered<TranslateService>()) {
       sl.registerLazySingleton<TranslateService>(() => translate);
     }
-    final theme = ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: Colors.blue,
-        brightness: Brightness.light,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.instance,
+      builder: (context, mode, _) => MaterialApp(
+        title: 'Codictionary',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: mode,
+        home: AppShell(defaultWords: defaultWords),
       ),
-      useMaterial3: true,
-    ).copyWith(scaffoldBackgroundColor: Colors.white);
-
-    return MaterialApp(
-      title: 'Codictionary',
-      theme: theme,
-      home: DictionaryView(defaultWords: defaultWords),
     );
   }
 }

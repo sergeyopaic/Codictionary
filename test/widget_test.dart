@@ -62,6 +62,6 @@ void main() {
 
     // Expect the Add Word FAB to be present
     expect(find.byType(FloatingActionButton), findsOneWidget);
-    expect(find.text('Add Word'), findsOneWidget);
+    expect(find.text('Add word'), findsOneWidget);
   });
 }

@@ -39,7 +39,9 @@ class DictionaryViewModel extends ChangeNotifier {
       // Seed defaults and persist them via add use-case
       words = List<legacy_model.Word>.from(seed);
       for (final w in words) {
-        await _addWord(AddWordParams(id: w.id, source: w.eng, target: w.rus, note: w.desc));
+        await _addWord(
+          AddWordParams(id: w.id, source: w.eng, target: w.rus, note: w.desc),
+        );
       }
     } else {
       words = list
@@ -118,7 +120,8 @@ class DictionaryViewModel extends ChangeNotifier {
 
   int get selectedCount => selected.length;
 
-  bool get areAllSelected => selected.length == filtered.length && filtered.isNotEmpty;
+  bool get areAllSelected =>
+      selected.length == filtered.length && filtered.isNotEmpty;
 
   void selectAll() {
     selected
@@ -145,6 +148,7 @@ class DictionaryViewModel extends ChangeNotifier {
       final nb = _normalizeEng(b.eng);
       return na.compareTo(nb);
     }
+
     switch (mode) {
       case SortMode.alphaAsc:
         words.sort(cmpAlpha);
@@ -380,4 +384,5 @@ class DictionaryViewModel extends ChangeNotifier {
     return text;
   }
 }
+
 enum SortMode { alphaAsc, alphaDesc, dateAdded }
