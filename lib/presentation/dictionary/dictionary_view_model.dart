@@ -355,6 +355,7 @@ class DictionaryViewModel extends ChangeNotifier {
     final eng = words[index].eng;
     final text = (await _gpt.explainWordShort(eng)).replaceAll('*', '');
     words[index] = words[index].copyWith(desc: text);
+    _applyFilter();
     notifyListeners();
     await _addWord(
       AddWordParams(
@@ -371,6 +372,7 @@ class DictionaryViewModel extends ChangeNotifier {
     final eng = words[index].eng;
     final text = (await _gpt.explainWordLong(eng)).replaceAll('*', '');
     words[index] = words[index].copyWith(descLong: text);
+    _applyFilter();
     notifyListeners();
     // Persist the short via note as before; long is persisted in the model storage layer
     await _addWord(

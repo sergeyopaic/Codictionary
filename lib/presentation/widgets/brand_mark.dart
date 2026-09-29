@@ -47,6 +47,10 @@ class CodyAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final imageHeight = size / CodyArt.standingBustHeight;
+    final imageWidth = imageHeight * CodyArt.standingAspect;
+    // The figure is not centered in the PNG; move the head to the middle.
+    final shiftX = (0.5 - CodyArt.standingHeadCenterX) * imageWidth;
     return Container(
       width: size,
       height: size,
@@ -59,18 +63,23 @@ class CodyAvatar extends StatelessWidget {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: OverflowBox(
-        maxHeight: size * 1.9,
-        alignment: Alignment.topCenter,
-        child: Padding(
-          padding: EdgeInsets.only(top: size * 0.1),
-          child: Image.asset(
-            CodyArt.standing,
-            height: size * 1.9,
-            fit: BoxFit.fitHeight,
-            filterQuality: FilterQuality.high,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Frame the head and shoulders: the visible window spans from just
+          // above the ears to the top of the shirt.
+          Positioned(
+            left: (size - imageWidth) / 2 + shiftX,
+            top: -CodyArt.standingHeadTop * imageHeight,
+            width: imageWidth,
+            height: imageHeight,
+            child: Image.asset(
+              CodyArt.standing,
+              fit: BoxFit.fill,
+              filterQuality: FilterQuality.high,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

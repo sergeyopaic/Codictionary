@@ -98,4 +98,24 @@ void main() {
     // Now dog was removed; adding a spaced variant should succeed
     expect(await vm.addWord(eng: '  DoG  ', rus: 'dog_new'), isTrue);
   });
+
+  test('regenerated explanation reaches the grid (filtered list)', () async {
+    final vm = DictionaryViewModel();
+    await vm.load(
+      seed: [
+        legacy_model.Word(
+          id: '1',
+          eng: 'apple',
+          rus: 'apple_ru',
+          desc: 'old',
+          addedAt: DateTime.now(),
+        ),
+      ],
+    );
+
+    await vm.regenerateDescription(0);
+
+    expect(vm.words.first.desc, 'desc:apple');
+    expect(vm.filtered.first.desc, 'desc:apple');
+  });
 }

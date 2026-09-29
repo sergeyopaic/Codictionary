@@ -37,7 +37,17 @@ class EmptyState extends StatelessWidget {
                   color: scheme.primaryContainer.withValues(alpha: 0.45),
                 ),
                 padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Image.asset(image, filterQuality: FilterQuality.high),
+                child: FractionalTranslation(
+                  // The standing pose sits left of center in its PNG.
+                  translation: image == CodyArt.standing
+                      ? const Offset(
+                          (0.5 - CodyArt.standingCenterX) *
+                              CodyArt.standingAspect,
+                          0,
+                        )
+                      : Offset.zero,
+                  child: Image.asset(image, filterQuality: FilterQuality.high),
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
               Text(

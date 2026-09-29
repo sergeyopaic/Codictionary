@@ -28,7 +28,9 @@ class DictionaryHero extends StatelessWidget {
         ? Color.lerp(scheme.primaryContainer, scheme.secondaryContainer, 0.6)!
         : Color.lerp(scheme.primary, scheme.secondary, 0.45)!;
     final height = compact ? 148.0 : 176.0;
-    final codyHeight = compact ? 168.0 : 210.0;
+    final codyHeight = compact ? 158.0 : 190.0;
+    // Gap between Cody's feet and the bottom edge of the banner.
+    final feetGap = compact ? 10.0 : 12.0;
 
     final title = total == 0
         ? 'Let\'s build your dictionary'
@@ -62,7 +64,7 @@ class DictionaryHero extends StatelessWidget {
           ),
           Positioned(
             right: compact ? 4 : AppSpacing.xxl,
-            bottom: -(codyHeight * 0.18),
+            bottom: feetGap - codyHeight * CodyArt.standingBottomMargin,
             child: Image.asset(
               CodyArt.standing,
               height: codyHeight,
