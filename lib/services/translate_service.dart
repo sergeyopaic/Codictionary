@@ -8,16 +8,18 @@ class TranslateService {
   static const _url = 'https://api-free.deepl.com/v2/translate';
 
   Future<String> translateToRu(String text) async {
+    // DeepL no longer accepts `auth_key` in the body; the key goes in the
+    // Authorization header. A map body is form-encoded by package:http.
     final resp = await http.post(
       Uri.parse(_url),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: 'auth_key=$deeplApiKey&text=$text&target_lang=RU',
+      headers: {'Authorization': 'DeepL-Auth-Key $deeplApiKey'},
+      body: {'text': text, 'source_lang': 'EN', 'target_lang': 'RU'},
     );
 
     if (resp.statusCode != 200) {
-      throw Exception('DeepL error: ${resp.body}');
+      throw Exception('DeepL error: ${resp.statusCode} ${resp.body}');
     }
-    final data = jsonDecode(resp.body);
+    final data = jsonDecode(utf8.decode(resp.bodyBytes));
     return data['translations'][0]['text'] as String;
   }
 }
