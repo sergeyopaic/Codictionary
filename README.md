@@ -1,27 +1,44 @@
 # Codictionary
 
 A personal vocabulary app for learning English words, built with Flutter. Add a
-word, get the Russian translation filled in automatically, and ask for a short or
-detailed explanation with examples when you want more than a translation.
+word, let Cody the squirrel fill in the Russian translation, and ask him for a
+quick or in-depth explanation with examples when a translation isn't enough.
 
-![Codictionary main screen: a grid of word cards with search and sorting](docs/screenshots/dictionary.png)
+![Dictionary screen: sidebar, a banner with word counts, search, sorting and a grid of word cards](docs/screenshots/dictionary.png)
 
 ## Features
 
-- **Word cards** — English word and Russian translation in a grid that adapts to
-  the screen width.
+- **Word cards** — the English word, its Russian translation and a preview of the
+  saved explanation, in a grid that adapts to the screen width.
 - **Auto-translate** — type the English word and the Russian field is filled in
-  through the DeepL API. Turn it off to enter your own translation.
-- **Explanations** — a short or a detailed explanation of a word (meaning, usage,
-  examples), generated in Russian through the OpenAI API and saved with the card.
-- **Search** across both English and Russian.
-- **Sorting** A–Z, Z–A or by date added, plus drag-and-drop to reorder by hand.
-- **Bulk actions** — select several cards and delete them at once, with undo.
-- **Multiple vocabularies** — create, rename and delete separate word lists, each
-  with its own icon.
-- **Duplicate check** — the same English word can't be added to a vocabulary twice.
+  through the DeepL API as you type. Switch it off to enter your own translation.
+- **Explanations** — a quick or an in-depth explanation of a word (meaning, usage,
+  examples), generated in Russian through the OpenAI API. Copy it, or regenerate it
+  if the first answer isn't useful.
+- **Search** across both English and Russian. If nothing matches, the search offers
+  to add the word you typed.
+- **Sorting** A–Z, Z–A or most recent, plus long-press drag-and-drop to reorder by
+  hand.
+- **Bulk actions** — switch to selection mode, pick several cards and delete them at
+  once. Every delete can be undone.
+- **Vocabularies** — themed collections with a name, description and icon. Create,
+  edit and delete them.
+- **Duplicate check** — the same English word can't be added twice.
+- **Light and dark themes**, following the system setting by default.
+- **Adaptive layout** — a sidebar on screens 900px and wider, a bottom navigation
+  bar on phones.
+- **Keyboard shortcuts** — `Ctrl+N` adds a word, `Ctrl+F` jumps to search, `Esc`
+  leaves selection mode.
 
-![Add Word dialog with the Auto-translate option](docs/screenshots/add-word.png)
+| Word details | Adding a word |
+| --- | --- |
+| ![Word details sheet with Quick and In depth tabs and Cody's explanation](docs/screenshots/word-details.png) | ![Add a word dialog with English and Russian fields and the Auto-translate switch](docs/screenshots/add-word.png) |
+
+![Vocabularies screen with three collections](docs/screenshots/vocabularies.png)
+
+<img src="docs/screenshots/phone-dark.png" alt="Phone layout in the dark theme with bottom navigation" width="300">
+
+The screenshots are from the web build with sample data.
 
 ## How it stores data
 
@@ -39,7 +56,6 @@ Everything stays on the device — there is no account and no backend.
 - `reorderable_grid_view` for drag-and-drop
 
 The project has Flutter targets for Android, iOS, web, Windows, macOS and Linux.
-The screenshots above are from the web build.
 
 ## Run it locally
 
@@ -72,21 +88,33 @@ keys in it. Don't publish a build that contains real keys.
 flutter test
 ```
 
+The tests cover the dictionary view model (load, add, edit, delete, regenerating an
+explanation) and the app shell in both wide and narrow layouts.
+
 CI (GitHub Actions) runs the format check, `flutter analyze` and the tests on every
 push and pull request.
+
+## Project structure
+
+- `lib/presentation/theme/` — the design system: colour palette taken from Cody,
+  light and dark themes, spacing, radius and motion tokens.
+- `lib/presentation/shell/` — the adaptive app shell (sidebar or bottom bar).
+- `lib/presentation/dictionary/` — the dictionary view, its view model and widgets
+  (banner, word card, details sheet, word editor, selection bar).
+- `lib/presentation/vocabs/` — the vocabularies view and its dialog.
+- `lib/presentation/dialogs/`, `lib/presentation/widgets/` — shared dialogs and
+  widgets.
+- `lib/domain/` — business logic: `entities`, `repositories` (abstractions),
+  `usecases`.
+- `lib/data/` — repository implementations.
+- `lib/services/` — legacy services (storage, DeepL, OpenAI) that the data layer
+  still wraps.
+- `lib/core/` — shared utilities and DI (`core/di`).
 
 ## Architecture (work in progress)
 
 The code is being migrated step by step towards Clean Architecture with MVVM. The
 target layout and rules are described in [ARCHITECTURE.MD](ARCHITECTURE.MD).
-
-- `lib/core/` — shared utilities and DI (`core/di`).
-- `lib/domain/` — business logic: `entities`, `repositories` (abstractions),
-  `usecases`.
-- `lib/data/` — implementations: `repositories`, `datasources`.
-- `lib/presentation/` — UI: views, view models, dialogs and widgets.
-- `lib/services/` — legacy services (storage, DeepL, OpenAI) that the data layer
-  still wraps.
 
 Bootstrap happens in `main()`, which calls `registerInitialDependencies()` and
 registers the app services in the service locator.
