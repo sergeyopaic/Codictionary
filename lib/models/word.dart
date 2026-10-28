@@ -1,5 +1,6 @@
-import 'package:uuid/uuid.dart';
-
+/// Persistence record for a word (the JSON shape on disk / in localStorage).
+/// Only the storage layer and `WordRepositoryImpl` use it; the rest of the app
+/// works with the domain `WordEntity`.
 class Word {
   final String id;
   final String eng;
@@ -33,10 +34,9 @@ class Word {
   );
 
   factory Word.fromMap(Map<String, dynamic> m) {
+    // A missing id stays empty; WordRepositoryImpl assigns and persists one.
     final rawId = m['id'];
-    final id = (rawId is String && rawId.isNotEmpty)
-        ? rawId
-        : const Uuid().v4();
+    final id = rawId is String ? rawId : '';
     final eng = (m['eng'] ?? '') as String;
     final rus = (m['rus'] ?? '') as String;
     // Backward compatibility: original field was 'desc' (short). New optional 'descLong'.

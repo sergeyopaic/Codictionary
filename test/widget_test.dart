@@ -10,28 +10,11 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/main.dart';
-import 'package:codictionary/models/word.dart';
-import 'package:codictionary/services/storage/storage_interface.dart';
+import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/services/gpt_service.dart';
 import 'package:codictionary/services/translate_service.dart';
 
-class _MemoryStorageService implements StorageService {
-  List<Word> _words = [];
-  @override
-  Future<List<Word>> loadWords() async => _words;
-  @override
-  Future<void> saveWords(List<Word> words) async {
-    _words = List.of(words);
-  }
-
-  List<Map<String, String>> _vocabs = [];
-  @override
-  Future<List<Map<String, String>>> loadVocabularies() async => _vocabs;
-  @override
-  Future<void> saveVocabularies(List<Map<String, String>> vocabs) async {
-    _vocabs = List.of(vocabs);
-  }
-}
+import 'fakes/json_storage_service.dart';
 
 void main() {
   testWidgets('App builds and shows Add Word button', (
@@ -46,9 +29,14 @@ void main() {
       tester.view.devicePixelRatio = previousDpr;
       tester.view.physicalSize = previousSize;
     });
-    final storage = _MemoryStorageService();
+    final storage = JsonStorageService();
     final defaults = [
-      Word(id: '1', eng: 'apple', rus: 'яблоко', addedAt: DateTime.now()),
+      WordEntity(
+        id: '1',
+        source: 'apple',
+        target: 'яблоко',
+        createdAt: DateTime.now(),
+      ),
     ];
 
     await tester.pumpWidget(

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
-import '../../models/word.dart';
+import '../../domain/entities/word_entity.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
 import '../dialogs/confirm_delete_dialog.dart';
 import '../theme/app_tokens.dart';
@@ -20,7 +20,7 @@ import 'widgets/word_details_sheet.dart';
 import 'widgets/word_editor_dialog.dart';
 
 class DictionaryView extends StatefulWidget {
-  final List<Word> defaultWords;
+  final List<WordEntity> defaultWords;
   const DictionaryView({super.key, required this.defaultWords});
 
   @override
@@ -77,7 +77,7 @@ class _DictionaryViewState extends State<DictionaryView> {
       initialEng: initialEng,
     );
     if (!added || !mounted) return;
-    final eng = vm.words.isEmpty ? null : vm.words.last.eng;
+    final eng = vm.words.isEmpty ? null : vm.words.last.source;
     await toasts.showWordAddedPopup(context, word: eng);
   }
 
@@ -90,14 +90,14 @@ class _DictionaryViewState extends State<DictionaryView> {
     messenger.showSnackBar(const SnackBar(content: Text('Word updated.')));
   }
 
-  Future<void> _deleteWord(Word word) async {
+  Future<void> _deleteWord(WordEntity word) async {
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await showConfirmDeleteDialog(context, word.eng);
+    final ok = await showConfirmDeleteDialog(context, word.source);
     if (!ok) return;
     await vm.deleteById(word.id);
     messenger.showSnackBar(
       SnackBar(
-        content: Text('"${word.eng}" deleted.'),
+        content: Text('"${word.source}" deleted.'),
         action: SnackBarAction(
           label: 'Undo',
           onPressed: () => vm.restoreWord(word),
@@ -131,7 +131,7 @@ class _DictionaryViewState extends State<DictionaryView> {
     );
   }
 
-  void _openDetails(Word word) {
+  void _openDetails(WordEntity word) {
     showWordDetails(
       context,
       vm: vm,
@@ -174,7 +174,11 @@ class _DictionaryViewState extends State<DictionaryView> {
     final wide = AppBreakpoints.isWide(context);
     final pad = wide ? AppSpacing.xxl : AppSpacing.lg;
     final explained = vm.words
-        .where((w) => w.desc != null && w.desc!.trim().isNotEmpty)
+        .where(
+          (w) =>
+              w.shortExplanation != null &&
+              w.shortExplanation!.trim().isNotEmpty,
+        )
         .length;
 
     return Scaffold(

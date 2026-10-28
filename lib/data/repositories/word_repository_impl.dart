@@ -1,47 +1,90 @@
+import 'package:uuid/uuid.dart';
+
 import '../../domain/entities/word_entity.dart';
+import '../../domain/exceptions/word_exceptions.dart';
 import '../../domain/repositories/word_repository.dart';
 import '../../services/storage/storage_interface.dart' as legacy;
-import '../../models/word.dart' as legacy_model;
+import '../../models/word.dart' as record;
 
 class WordRepositoryImpl implements WordRepository {
   final legacy.StorageService storage;
   WordRepositoryImpl(this.storage);
 
   @override
-  Future<void> add(WordEntity word) async {
-    final list = await storage.loadWords();
-    final updated = legacy_model.Word(
-      id: word.id,
-      eng: word.source,
-      rus: word.target,
-      desc: word.note,
-      addedAt: DateTime.now(),
-    );
-    int existing = list.indexWhere((w) => w.id == word.id);
-    if (existing >= 0) {
-      list[existing] = updated;
-      await storage.saveWords(list);
-    } else {
-      final newList = List<legacy_model.Word>.from(list)..add(updated);
-      await storage.saveWords(newList);
-    }
+  Future<List<WordEntity>> getAll() async {
+    final records = await _loadNormalized();
+    return records.map(_toEntity).toList(growable: false);
   }
 
   @override
-  Future<List<WordEntity>> getAll() async {
-    final words = await storage.loadWords();
-    return words
-        .map(
-          (w) =>
-              WordEntity(id: w.id, source: w.eng, target: w.rus, note: w.desc),
-        )
-        .toList(growable: false);
+  Future<void> create(WordEntity word) async {
+    final records = await _loadNormalized();
+    if (records.any((r) => r.id == word.id)) {
+      throw WordAlreadyExistsException(word.id);
+    }
+    await storage.saveWords([...records, _toRecord(word)]);
+  }
+
+  @override
+  Future<void> update(WordEntity word) async {
+    final records = await _loadNormalized();
+    final i = records.indexWhere((r) => r.id == word.id);
+    if (i < 0) throw WordNotFoundException(word.id);
+    // The creation date belongs to the stored record, never to the caller.
+    records[i] = _toRecord(word, createdAt: records[i].addedAt);
+    await storage.saveWords(records);
   }
 
   @override
   Future<void> remove(String id) async {
-    final list = await storage.loadWords();
-    final newList = list.where((w) => w.id != id).toList();
-    await storage.saveWords(newList);
+    final records = await _loadNormalized();
+    final remaining = records.where((r) => r.id != id).toList();
+    if (remaining.length == records.length) return;
+    await storage.saveWords(remaining);
   }
+
+  /// Loads stored records and repairs empty or duplicate ids. Without this,
+  /// an empty id gets a new random id on every load and duplicates make
+  /// updates and removals hit the wrong entry. Repairs are persisted once.
+  Future<List<record.Word>> _loadNormalized() async {
+    final records = List.of(await storage.loadWords());
+    final seen = <String>{};
+    var changed = false;
+    for (var i = 0; i < records.length; i++) {
+      final r = records[i];
+      if (r.id.isEmpty || seen.contains(r.id)) {
+        records[i] = record.Word(
+          id: const Uuid().v4(),
+          eng: r.eng,
+          rus: r.rus,
+          desc: r.desc,
+          descLong: r.descLong,
+          addedAt: r.addedAt,
+        );
+        changed = true;
+      }
+      seen.add(records[i].id);
+    }
+    if (changed) await storage.saveWords(records);
+    return records;
+  }
+
+  static WordEntity _toEntity(record.Word r) => WordEntity(
+    id: r.id,
+    source: r.eng,
+    target: r.rus,
+    shortExplanation: r.desc,
+    longExplanation: r.descLong,
+    createdAt: r.addedAt,
+  );
+
+  static record.Word _toRecord(WordEntity w, {DateTime? createdAt}) =>
+      record.Word(
+        id: w.id,
+        eng: w.source,
+        rus: w.target,
+        desc: w.shortExplanation,
+        descLong: w.longExplanation,
+        addedAt: createdAt ?? w.createdAt,
+      );
 }

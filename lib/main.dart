@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import 'models/word.dart';
+import 'domain/entities/word_entity.dart';
 import 'services/gpt_service.dart';
 import 'services/storage_service.dart';
 import 'services/translate_service.dart';
@@ -19,10 +19,25 @@ late final GptService gpt;
 late final TranslateService translate;
 late final StorageService storage;
 
-final List<Word> _defaultWords = [
-  Word(id: '1', eng: 'apple', rus: 'яблоко', addedAt: DateTime.now()),
-  Word(id: '2', eng: 'dog', rus: 'собака', addedAt: DateTime.now()),
-  Word(id: '3', eng: 'house', rus: 'дом', addedAt: DateTime.now()),
+final List<WordEntity> _defaultWords = [
+  WordEntity(
+    id: '1',
+    source: 'apple',
+    target: 'яблоко',
+    createdAt: DateTime.now(),
+  ),
+  WordEntity(
+    id: '2',
+    source: 'dog',
+    target: 'собака',
+    createdAt: DateTime.now(),
+  ),
+  WordEntity(
+    id: '3',
+    source: 'house',
+    target: 'дом',
+    createdAt: DateTime.now(),
+  ),
 ];
 
 Future<void> main() async {
@@ -62,7 +77,7 @@ class MyApp extends StatelessWidget {
   final GptService gpt;
   final TranslateService translate;
   final StorageService storage;
-  final List<Word> defaultWords;
+  final List<WordEntity> defaultWords;
 
   @override
   Widget build(BuildContext context) {

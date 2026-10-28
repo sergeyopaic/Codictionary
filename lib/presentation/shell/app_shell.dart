@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../models/word.dart';
+import '../../domain/entities/word_entity.dart';
 import '../dictionary/dictionary_view.dart';
 import '../theme/app_tokens.dart';
 import '../theme/theme_controller.dart';
@@ -28,7 +28,7 @@ const _destinations = [
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.defaultWords});
 
-  final List<Word> defaultWords;
+  final List<WordEntity> defaultWords;
 
   @override
   State<AppShell> createState() => _AppShellState();

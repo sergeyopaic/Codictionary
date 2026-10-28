@@ -57,8 +57,8 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
   void initState() {
     super.initState();
     final word = _isEdit ? widget.vm.words[widget.index!] : null;
-    _eng = TextEditingController(text: word?.eng ?? widget.initialEng ?? '');
-    _rus = TextEditingController(text: word?.rus ?? '');
+    _eng = TextEditingController(text: word?.source ?? widget.initialEng ?? '');
+    _rus = TextEditingController(text: word?.target ?? '');
     // When editing, an existing translation counts as user-provided.
     _rusTouched = _isEdit && _rus.text.isNotEmpty;
     if (!_isEdit && _eng.text.isNotEmpty) _onEngChanged(_eng.text);

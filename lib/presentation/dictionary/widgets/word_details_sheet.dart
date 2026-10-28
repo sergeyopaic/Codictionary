@@ -132,7 +132,7 @@ class _WordDetailsState extends State<WordDetails> {
         final theme = Theme.of(context);
         final scheme = theme.colorScheme;
         final isShort = _tab == 0;
-        final text = isShort ? word.desc : word.descLong;
+        final text = isShort ? word.shortExplanation : word.longExplanation;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -145,12 +145,12 @@ class _WordDetailsState extends State<WordDetails> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SelectableText(
-                        word.eng,
+                        word.source,
                         style: theme.textTheme.headlineMedium,
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       SelectableText(
-                        word.rus.isEmpty ? '—' : word.rus,
+                        word.target.isEmpty ? '—' : word.target,
                         style: theme.textTheme.titleLarge?.copyWith(
                           color: scheme.secondary,
                           fontWeight: FontWeight.w600,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../models/word.dart';
+import '../../../domain/entities/word_entity.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/word_card_menu.dart';
 
@@ -18,7 +18,7 @@ class WordCard extends StatefulWidget {
     required this.onDelete,
   });
 
-  final Word word;
+  final WordEntity word;
   final bool selectionMode;
   final bool selected;
   final VoidCallback onTap;
@@ -88,7 +88,7 @@ class _WordCardState extends State<WordCard> {
                     children: [
                       Expanded(
                         child: Text(
-                          word.eng,
+                          word.source,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleLarge,
@@ -100,7 +100,7 @@ class _WordCardState extends State<WordCard> {
                   Padding(
                     padding: const EdgeInsets.only(right: AppSpacing.md),
                     child: Text(
-                      word.rus.isEmpty ? '—' : word.rus,
+                      word.target.isEmpty ? '—' : word.target,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyLarge?.copyWith(
@@ -112,7 +112,7 @@ class _WordCardState extends State<WordCard> {
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.only(right: AppSpacing.md),
-                    child: _DescriptionPreview(desc: word.desc),
+                    child: _DescriptionPreview(desc: word.shortExplanation),
                   ),
                 ],
               ),

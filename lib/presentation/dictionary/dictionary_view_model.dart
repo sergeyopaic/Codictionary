@@ -1,18 +1,21 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/di/service_locator.dart';
+import '../../domain/entities/word_entity.dart';
+import '../../domain/exceptions/word_exceptions.dart';
 import '../../domain/usecases/add_word.dart';
 import '../../domain/usecases/get_all_words.dart';
 import '../../domain/usecases/remove_word.dart';
+import '../../domain/usecases/restore_word.dart';
+import '../../domain/usecases/update_word.dart';
 import '../../services/gpt_service.dart';
 import '../../services/translate_service.dart';
-import '../../models/word.dart' as legacy_model;
 
 class DictionaryViewModel extends ChangeNotifier {
   final GetAllWords _getAll;
   final AddWord _addWord;
+  final UpdateWord _updateWord;
+  final RestoreWord _restoreWord;
   final RemoveWord _removeWord;
   final GptService _gpt;
   final TranslateService _translate;
@@ -20,80 +23,39 @@ class DictionaryViewModel extends ChangeNotifier {
   DictionaryViewModel()
     : _getAll = sl(),
       _addWord = sl(),
+      _updateWord = sl(),
+      _restoreWord = sl(),
       _removeWord = sl(),
       _gpt = sl(),
       _translate = sl();
 
-  List<legacy_model.Word> words = [];
-  List<legacy_model.Word> filtered = [];
+  List<WordEntity> words = [];
+  List<WordEntity> filtered = [];
   String query = '';
   final Set<String> removing = {};
   bool selectionMode = false;
   final Set<String> selected = {};
   SortMode currentSort = SortMode.alphaAsc;
-  Timer? _debounce;
 
-  Future<void> load({List<legacy_model.Word> seed = const []}) async {
+  Future<void> load({List<WordEntity> seed = const []}) async {
     final list = await _getAll();
     if (list.isEmpty && seed.isNotEmpty) {
-      // Seed defaults and persist them via add use-case
-      words = List<legacy_model.Word>.from(seed);
-      for (final w in words) {
-        await _addWord(
-          AddWordParams(id: w.id, source: w.eng, target: w.rus, note: w.desc),
-        );
+      // Seed defaults with their own ids and dates.
+      for (final w in seed) {
+        await _restoreWord(w);
       }
+      words = List.of(seed);
     } else {
-      words = list
-          .map(
-            (e) => legacy_model.Word(
-              id: e.id,
-              eng: e.source,
-              rus: e.target,
-              desc: e.note,
-              addedAt: DateTime.now(),
-            ),
-          )
-          .toList();
+      words = List.of(list);
     }
-    await _fixDuplicateOrEmptyIds();
     _applyFilter();
     notifyListeners();
-  }
-
-  Future<void> _fixDuplicateOrEmptyIds() async {
-    if (words.isEmpty) return;
-    final seen = <String>{};
-    final toPersist = <legacy_model.Word>[];
-    for (var i = 0; i < words.length; i++) {
-      final w = words[i];
-      var id = w.id;
-      final duplicate = id.isEmpty || seen.contains(id);
-      if (duplicate) {
-        id = const Uuid().v4();
-      }
-      seen.add(id);
-      if (duplicate) {
-        final fixed = legacy_model.Word(
-          id: id,
-          eng: w.eng,
-          rus: w.rus,
-          desc: w.desc,
-          descLong: w.descLong,
-          addedAt: w.addedAt,
-        );
-        words[i] = fixed;
-        toPersist.add(fixed);
-      }
-    }
-    // Avoid persisting here to prevent creating duplicates in storage.
-    // The corrected state will be saved on the next explicit add/edit.
   }
 
   void reorder(int oldIndex, int newIndex) {
     final item = filtered.removeAt(oldIndex);
     filtered.insert(newIndex, item);
-    words = List<legacy_model.Word>.from(filtered);
+    words = List<WordEntity>.from(filtered);
     notifyListeners();
   }
 
@@ -143,9 +105,9 @@ class DictionaryViewModel extends ChangeNotifier {
 
   void setSort(SortMode mode) {
     currentSort = mode;
-    int cmpAlpha(legacy_model.Word a, legacy_model.Word b) {
-      final na = _normalizeEng(a.eng);
-      final nb = _normalizeEng(b.eng);
+    int cmpAlpha(WordEntity a, WordEntity b) {
+      final na = _normalizeEng(a.source);
+      final nb = _normalizeEng(b.source);
       return na.compareTo(nb);
     }
 
@@ -157,7 +119,7 @@ class DictionaryViewModel extends ChangeNotifier {
         words.sort((a, b) => -cmpAlpha(a, b));
         break;
       case SortMode.dateAdded:
-        words.sort((a, b) => b.addedAt.compareTo(a.addedAt));
+        words.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         break;
     }
     _applyFilter();
@@ -177,16 +139,11 @@ class DictionaryViewModel extends ChangeNotifier {
       filtered = words
           .where(
             (w) =>
-                w.eng.toLowerCase().contains(query) ||
-                w.rus.toLowerCase().contains(query),
+                w.source.toLowerCase().contains(query) ||
+                w.target.toLowerCase().contains(query),
           )
           .toList();
     }
-  }
-
-  Future<String> autoTranslate(String eng) async {
-    _debounce?.cancel();
-    return _translate.translateToRu(eng);
   }
 
   String _normalizeEng(String s) {
@@ -252,37 +209,44 @@ class DictionaryViewModel extends ChangeNotifier {
     return words.any((w) {
       if (w.id == (exceptId ?? '')) return false;
       // Block if same English already exists in this vocabulary (primary key)
-      if (_normalizeEng(w.eng) == nEng) return true;
+      if (_normalizeEng(w.source) == nEng) return true;
       // Optionally also block if exact same pair already exists
-      if (_normalizeEng(w.eng) == nEng && _normalizeRus(w.rus) == nRus) {
+      if (_normalizeEng(w.source) == nEng && _normalizeRus(w.target) == nRus) {
         return true;
       }
       return false;
     });
   }
 
+  Future<String?> _tryExplainShort(String eng) async {
+    try {
+      return (await _gpt.explainWordShort(eng)).replaceAll('*', '');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Replaces the in-memory copy of [word] and persists it.
+  Future<void> _save(WordEntity word) async {
+    final i = words.indexWhere((w) => w.id == word.id);
+    if (i < 0) return;
+    words[i] = word;
+    _applyFilter();
+    notifyListeners();
+    await _updateWord(word);
+  }
+
   Future<bool> addWord({required String eng, required String rus}) async {
     if (_existsInCurrentVocab(eng, rus)) {
       return false;
     }
-    final id = const Uuid().v4();
-    String? desc;
-    try {
-      final text = await _gpt.explainWordShort(eng);
-      desc = text.replaceAll('*', '');
-    } catch (_) {}
-    words.add(
-      legacy_model.Word(
-        id: id,
-        eng: eng,
-        rus: rus,
-        desc: desc,
-        addedAt: DateTime.now(),
-      ),
+    final desc = await _tryExplainShort(eng);
+    final word = await _addWord(
+      AddWordParams(source: eng, target: rus, shortExplanation: desc),
     );
+    words.add(word);
     _applyFilter();
     notifyListeners();
-    await _addWord(AddWordParams(id: id, source: eng, target: rus, note: desc));
     return true;
   }
 
@@ -295,21 +259,17 @@ class DictionaryViewModel extends ChangeNotifier {
     if (_existsInCurrentVocab(eng, rus, exceptId: original.id)) {
       return false;
     }
-    String? desc = original.desc;
-    final changed = eng != original.eng || rus != original.rus;
-    if (changed) {
-      try {
-        final text = await _gpt.explainWordShort(eng);
-        desc = text.replaceAll('*', '');
-      } catch (_) {}
+    var updated = original.copyWith(source: eng, target: rus);
+    // Explanations describe the English word. When it changes they are stale:
+    // drop both and try to generate a fresh short one. A translation-only
+    // edit keeps them.
+    if (_normalizeEng(eng) != _normalizeEng(original.source)) {
+      updated = updated.copyWith(
+        shortExplanation: await _tryExplainShort(eng),
+        longExplanation: null,
+      );
     }
-    words[index] = original.copyWith(eng: eng, rus: rus, desc: desc);
-    _applyFilter();
-    notifyListeners();
-    // Persist via add use-case by same id (repository replaces/append)
-    await _addWord(
-      AddWordParams(id: original.id, source: eng, target: rus, note: desc),
-    );
+    await _save(updated);
     return true;
   }
 
@@ -320,23 +280,26 @@ class DictionaryViewModel extends ChangeNotifier {
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 200));
     removing.remove(id);
-    words.removeAt(idx);
+    words.removeWhere((w) => w.id == id);
     _applyFilter();
     notifyListeners();
     await _removeWord(id);
   }
 
-  Future<void> restoreWord(legacy_model.Word w) async {
+  /// Puts a deleted word back with all of its fields (Undo).
+  Future<void> restoreWord(WordEntity w) async {
+    if (words.any((e) => e.id == w.id)) return;
     words.add(w);
     _applyFilter();
     notifyListeners();
-    await _addWord(
-      AddWordParams(id: w.id, source: w.eng, target: w.rus, note: w.desc),
-    );
+    try {
+      await _restoreWord(w);
+    } on WordAlreadyExistsException {
+      // Already stored (e.g. the delete never reached storage); nothing to do.
+    }
   }
 
-  Future<void> restoreWords(List<legacy_model.Word> list) async {
-    if (list.isEmpty) return;
+  Future<void> restoreWords(List<WordEntity> list) async {
     for (final w in list) {
       await restoreWord(w);
     }
@@ -346,43 +309,17 @@ class DictionaryViewModel extends ChangeNotifier {
     return _translate.translateToRu(eng);
   }
 
-  String currentDescription(int index) =>
-      words[index].desc ?? 'Waiting for response...';
-
-  String? currentLongDescription(int index) => words[index].descLong;
-
   Future<String> regenerateDescription(int index) async {
-    final eng = words[index].eng;
-    final text = (await _gpt.explainWordShort(eng)).replaceAll('*', '');
-    words[index] = words[index].copyWith(desc: text);
-    _applyFilter();
-    notifyListeners();
-    await _addWord(
-      AddWordParams(
-        id: words[index].id,
-        source: words[index].eng,
-        target: words[index].rus,
-        note: text,
-      ),
-    );
+    final word = words[index];
+    final text = (await _gpt.explainWordShort(word.source)).replaceAll('*', '');
+    await _save(word.copyWith(shortExplanation: text));
     return text;
   }
 
   Future<String> generateOrRegenerateLong(int index) async {
-    final eng = words[index].eng;
-    final text = (await _gpt.explainWordLong(eng)).replaceAll('*', '');
-    words[index] = words[index].copyWith(descLong: text);
-    _applyFilter();
-    notifyListeners();
-    // Persist the short via note as before; long is persisted in the model storage layer
-    await _addWord(
-      AddWordParams(
-        id: words[index].id,
-        source: words[index].eng,
-        target: words[index].rus,
-        note: words[index].desc,
-      ),
-    );
+    final word = words[index];
+    final text = (await _gpt.explainWordLong(word.source)).replaceAll('*', '');
+    await _save(word.copyWith(longExplanation: text));
     return text;
   }
 }
