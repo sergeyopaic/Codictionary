@@ -32,8 +32,11 @@ class GptService {
   final http.Client _client;
   final Sleep _sleep;
 
+  /// False in local mode (no key): the app then never asks for explanations.
+  bool get isConfigured => apiKey.trim().isNotEmpty;
+
   Future<String> sendPrompt(String prompt, {int maxTokens = 400}) async {
-    if (apiKey.trim().isEmpty) {
+    if (!isConfigured) {
       throw const ServiceException(_service, ServiceFailure.notConfigured);
     }
     return callService(

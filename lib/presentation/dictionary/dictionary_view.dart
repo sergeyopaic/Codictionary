@@ -506,6 +506,11 @@ class _DictionaryViewState extends State<DictionaryView> {
                   selectionMode: vm.selectionMode,
                   selected: vm.selected.contains(word.id),
                   onTap: () => _openDetails(word),
+                  generating: vm.isGenerating(word.id, ExplanationKind.short),
+                  generationFailed:
+                      vm.generationError(word.id, ExplanationKind.short) !=
+                      null,
+                  aiAvailable: vm.aiAvailable,
                   onLongPress: vm.canReorder || vm.selectionMode
                       ? null
                       : _explainReorderBlocked,

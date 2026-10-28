@@ -20,9 +20,15 @@ late final StorageService storage;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
-  apiKey = dotenv.env['OPENAI_API_KEY'];
-  deeplApiKey = dotenv.env['DEEPL_API_KEY'];
+  try {
+    await dotenv.load(fileName: ".env");
+    apiKey = dotenv.env['OPENAI_API_KEY'];
+    deeplApiKey = dotenv.env['DEEPL_API_KEY'];
+  } catch (_) {
+    // No or unreadable .env: run in local mode without AI and translation.
+    apiKey = null;
+    deeplApiKey = null;
+  }
   storage = createStorageService();
   gpt = GptService(apiKey ?? '');
   translate = TranslateService(deeplApiKey ?? '');

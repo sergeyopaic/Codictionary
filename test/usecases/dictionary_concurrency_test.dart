@@ -84,13 +84,14 @@ void main() {
 
   test('a late explanation is not attached to a renamed word', () async {
     await setUpVm();
-    final regenerate = vm.regenerateShortExplanation('1'); // for "apple"
-    final edit = vm.editWord('1', eng: 'pear', rus: 'груша'); // asks for "pear"
+    final regenerate = vm.regenerateShortExplanation('1'); // #0 for "apple"
 
+    // The edit saves at once and asks for an explanation of "pear" (#1).
+    expect(await vm.editWord('1', eng: 'pear', rus: 'груша'), isTrue);
     gpt.answer(1); // pear
-    expect(await edit, isTrue);
     gpt.answer(0); // apple, arrives last
     expect(await regenerate, isNull);
+    await vm.whenIdle();
 
     final pear = storedById(await stored(), '1');
     expect(pear.source, 'pear');
@@ -115,12 +116,14 @@ void main() {
     final a = vm.addWord(eng: 'cat', rus: 'кошка');
     final b = vm.addWord(eng: 'Cat ', rus: 'кот');
 
-    expect(gpt.calls, hasLength(1), reason: 'the second add is rejected');
-    gpt.answer(0);
-
     expect(await Future.wait([a, b]), [true, false]);
+    expect(gpt.calls, hasLength(1), reason: 'one explanation for one word');
+    gpt.answer(0);
+    await vm.whenIdle();
+
     final cats = (await stored()).where((w) => w.source.trim() == 'cat');
     expect(cats, hasLength(1));
+    expect(cats.single.shortExplanation, 'short:cat#0');
     expect(vm.words.where((w) => w.source == 'cat'), hasLength(1));
   });
 

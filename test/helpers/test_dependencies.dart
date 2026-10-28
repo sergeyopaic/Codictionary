@@ -57,6 +57,9 @@ class FakeTranslate extends TranslateService {
 class ControlledGpt extends GptService {
   ControlledGpt() : super('');
 
+  @override
+  bool get isConfigured => true;
+
   final List<({String kind, String word, Completer<String> completer})> calls =
       [];
 
@@ -76,5 +79,22 @@ class ControlledGpt extends GptService {
   void answer(int i) {
     final c = calls[i];
     c.completer.complete('${c.kind}:${c.word}#$i');
+  }
+}
+
+/// Translation fake whose answers the test releases explicitly.
+class ControlledTranslate extends TranslateService {
+  ControlledTranslate() : super('');
+
+  @override
+  bool get isConfigured => true;
+
+  final List<({String text, Completer<String> completer})> calls = [];
+
+  @override
+  Future<String> translateToRu(String eng) {
+    final completer = Completer<String>();
+    calls.add((text: eng, completer: completer));
+    return completer.future;
   }
 }

@@ -13,6 +13,9 @@ class WordCard extends StatefulWidget {
     required this.selected,
     required this.onTap,
     this.onLongPress,
+    this.generating = false,
+    this.generationFailed = false,
+    this.aiAvailable = true,
     required this.onToggleSelect,
     required this.onExplain,
     required this.onEdit,
@@ -26,6 +29,11 @@ class WordCard extends StatefulWidget {
 
   /// Only set when dragging is unavailable; otherwise long-press starts a drag.
   final VoidCallback? onLongPress;
+
+  /// State of the short explanation, shown in the preview line.
+  final bool generating;
+  final bool generationFailed;
+  final bool aiAvailable;
   final VoidCallback onToggleSelect;
   final VoidCallback onExplain;
   final VoidCallback onEdit;
@@ -117,7 +125,12 @@ class _WordCardState extends State<WordCard> {
                   const Spacer(),
                   Padding(
                     padding: const EdgeInsets.only(right: AppSpacing.md),
-                    child: _DescriptionPreview(desc: word.shortExplanation),
+                    child: _DescriptionPreview(
+                      desc: word.shortExplanation,
+                      generating: widget.generating,
+                      failed: widget.generationFailed,
+                      aiAvailable: widget.aiAvailable,
+                    ),
                   ),
                 ],
               ),
@@ -159,36 +172,72 @@ class _WordCardState extends State<WordCard> {
 }
 
 class _DescriptionPreview extends StatelessWidget {
-  const _DescriptionPreview({required this.desc});
+  const _DescriptionPreview({
+    required this.desc,
+    required this.generating,
+    required this.failed,
+    required this.aiAvailable,
+  });
 
   final String? desc;
+  final bool generating;
+  final bool failed;
+  final bool aiAvailable;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final hasDesc = desc != null && desc!.trim().isNotEmpty;
+
+    final (Widget icon, String text, Color? color) = switch (()) {
+      _ when generating => (
+        SizedBox.square(
+          dimension: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.6,
+            color: scheme.tertiary,
+          ),
+        ),
+        'Cody is writing an explanation…',
+        null,
+      ),
+      _ when hasDesc => (
+        Icon(Icons.auto_awesome_rounded, size: 14, color: scheme.tertiary),
+        desc!.trim(),
+        null,
+      ),
+      _ when failed => (
+        Icon(Icons.error_outline_rounded, size: 14, color: scheme.error),
+        'Explanation failed — open to try again',
+        scheme.error,
+      ),
+      _ when !aiAvailable => (
+        Icon(Icons.auto_awesome_outlined, size: 14, color: scheme.outline),
+        'No explanation',
+        null,
+      ),
+      _ => (
+        Icon(Icons.auto_awesome_rounded, size: 14, color: scheme.outline),
+        'No explanation yet — tap to generate',
+        null,
+      ),
+    };
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Icon(
-            Icons.auto_awesome_rounded,
-            size: 14,
-            color: hasDesc ? scheme.tertiary : scheme.outline,
-          ),
-        ),
+        Padding(padding: const EdgeInsets.only(top: 2), child: icon),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Text(
-            hasDesc ? desc!.trim() : 'No explanation yet — tap to generate',
+            text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
+              color: color ?? scheme.onSurfaceVariant,
               height: 1.4,
-              fontStyle: hasDesc ? null : FontStyle.italic,
+              fontStyle: hasDesc && !generating ? null : FontStyle.italic,
             ),
           ),
         ),

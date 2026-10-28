@@ -38,8 +38,11 @@ class TranslateService {
             : 'https://api.deepl.com/v2/translate',
       );
 
+  /// False in local mode (no key): translations are typed by the user.
+  bool get isConfigured => deeplApiKey.trim().isNotEmpty;
+
   Future<String> translateToRu(String text) async {
-    if (deeplApiKey.trim().isEmpty) {
+    if (!isConfigured) {
       throw const ServiceException(_service, ServiceFailure.notConfigured);
     }
     return callService(

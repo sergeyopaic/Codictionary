@@ -67,9 +67,58 @@ class DictionaryViewModel extends ChangeNotifier {
   /// Latest AI request per word id. A response is applied only if it belongs
   /// to the latest request, so an older, slower response cannot overwrite a
   /// newer one.
-  final Map<String, int> _shortRequests = {};
-  final Map<String, int> _longRequests = {};
+  final Map<ExplanationKind, Map<String, int>> _requests = {
+    for (final k in ExplanationKind.values) k: {},
+  };
   int _requestCounter = 0;
+
+  /// Generations in progress (id -> request) and the last failure per word.
+  final Map<ExplanationKind, Map<String, int>> _running = {
+    for (final k in ExplanationKind.values) k: {},
+  };
+  final Map<ExplanationKind, Map<String, Object>> _failures = {
+    for (final k in ExplanationKind.values) k: {},
+  };
+
+  /// Background work started by this view model, for [whenIdle].
+  final Set<Future<void>> _inFlight = {};
+
+  /// False in local mode: no API key, so no explanations are requested.
+  bool get aiAvailable => _gpt.isConfigured;
+
+  /// False in local mode: translations are typed by the user.
+  bool get translationAvailable => _translate.isConfigured;
+
+  bool isGenerating(String id, ExplanationKind kind) =>
+      _running[kind]!.containsKey(id);
+
+  /// Why the last generation for this word failed (a [ServiceException] or
+  /// [StorageException]); null if it did not fail or was retried.
+  Object? generationError(String id, ExplanationKind kind) =>
+      _failures[kind]![id];
+
+  /// Completes when all background generations have finished.
+  Future<void> whenIdle() async {
+    while (_inFlight.isNotEmpty) {
+      await Future.wait(List.of(_inFlight));
+    }
+  }
+
+  Future<T> _track<T>(Future<T> work) {
+    final done = work.then<void>((_) {}, onError: (_) {});
+    _inFlight.add(done);
+    done.whenComplete(() => _inFlight.remove(done));
+    return work;
+  }
+
+  /// Marks every in-flight generation for [id] as outdated.
+  void _invalidateGenerations(String id) {
+    for (final kind in ExplanationKind.values) {
+      _startRequest(_requests[kind]!, id);
+      _running[kind]!.remove(id);
+      _failures[kind]!.remove(id);
+    }
+  }
 
   bool _disposed = false;
 
@@ -304,14 +353,6 @@ class DictionaryViewModel extends ChangeNotifier {
   int _startRequest(Map<String, int> requests, String id) =>
       requests[id] = ++_requestCounter;
 
-  Future<String?> _tryExplainShort(String eng) async {
-    try {
-      return (await _gpt.explainWordShort(eng)).replaceAll('*', '');
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// Replaces the in-memory copy of [word] and persists it. A word that was
   /// deleted (or is being deleted) is never brought back. If storage fails
   /// the change is rolled back and the [StorageException] rethrown.
@@ -344,15 +385,13 @@ class DictionaryViewModel extends ChangeNotifier {
     final key = _normalizeEng(eng);
     _pendingAdds.add(key);
     try {
-      final desc = await _tryExplainShort(eng);
-      // Re-check at commit: an Undo may have restored the same word.
-      if (_hasSource(key)) return false;
-      final word = await _addWord(
-        AddWordParams(source: eng, target: rus, shortExplanation: desc),
-      );
+      // Save right away; the explanation follows in the background, so an
+      // unavailable AI service never blocks or loses the word.
+      final word = await _addWord(AddWordParams(source: eng, target: rus));
       words.add(word);
       _applyFilter();
       _notify();
+      if (aiAvailable) _track(_generate(word.id, ExplanationKind.short));
       return true;
     } finally {
       _pendingAdds.remove(key);
@@ -393,32 +432,20 @@ class DictionaryViewModel extends ChangeNotifier {
     if (original == null || _existsInCurrentVocab(eng, exceptId: id)) {
       return false;
     }
+    if (removing.contains(id)) return false;
     // Explanations describe the English word. When it changes they are stale:
-    // drop both and try to generate a fresh short one. A translation-only
-    // edit keeps them.
+    // drop both, cancel generations for the old word, save, then generate a
+    // fresh short one in the background. A translation-only edit keeps them.
     final sourceChanged = _normalizeEng(eng) != _normalizeEng(original.source);
-    String? newShort;
-    int? shortRequest;
+    var updated = original.copyWith(source: eng, target: rus);
     if (sourceChanged) {
-      shortRequest = _startRequest(_shortRequests, id);
-      _startRequest(_longRequests, id); // cancels an in-flight long request
-      newShort = await _tryExplainShort(eng);
-    }
-
-    // Apply to the current version of the word, not the one we started with.
-    final current = wordById(id);
-    if (current == null || removing.contains(id)) return false;
-    if (_hasSource(_normalizeEng(eng), exceptId: id)) return false;
-    var updated = current.copyWith(source: eng, target: rus);
-    if (sourceChanged) {
-      updated = updated.copyWith(
-        // If a newer request for this word started meanwhile, it will fill
-        // the explanation in; ours is outdated.
-        shortExplanation: _shortRequests[id] == shortRequest ? newShort : null,
-        longExplanation: null,
-      );
+      updated = updated.copyWith(shortExplanation: null, longExplanation: null);
+      _invalidateGenerations(id);
     }
     await _save(updated);
+    if (sourceChanged && aiAvailable) {
+      _track(_generate(id, ExplanationKind.short));
+    }
     return true;
   }
 
@@ -434,6 +461,7 @@ class DictionaryViewModel extends ChangeNotifier {
     if (index < 0) return;
     final removed = words.removeAt(index);
     final wasSelected = selected.remove(id);
+    _invalidateGenerations(id);
     _deletedAt[id] = (index: index, seq: ++_deleteSeq);
     _applyFilter();
     _notify();
@@ -486,36 +514,49 @@ class DictionaryViewModel extends ChangeNotifier {
     return _translate.translateToRu(eng);
   }
 
-  /// Generates a new short explanation. Returns null if the result was
-  /// discarded because the word changed, was deleted or a newer request
-  /// started. Provider errors are rethrown for the UI to show.
-  Future<String?> regenerateShortExplanation(String id) async {
-    final word = wordById(id);
-    if (word == null) return null;
-    final request = _startRequest(_shortRequests, id);
-    final text = (await _gpt.explainWordShort(word.source)).replaceAll('*', '');
-    final applied = await _applyGenerated(
-      id,
-      requested: word.source,
-      isLatest: () => _shortRequests[id] == request,
-      apply: (w) => w.copyWith(shortExplanation: text),
-    );
-    return applied ? text : null;
-  }
+  /// Generates a new short explanation. Returns the text, or null if it
+  /// failed (see [generationError]) or was discarded because the word
+  /// changed, was deleted or a newer request started. Never throws.
+  Future<String?> regenerateShortExplanation(String id) =>
+      _track(_generate(id, ExplanationKind.short));
 
   /// Same as [regenerateShortExplanation] for the detailed explanation.
-  Future<String?> generateLongExplanation(String id) async {
+  Future<String?> generateLongExplanation(String id) =>
+      _track(_generate(id, ExplanationKind.long));
+
+  Future<String?> _generate(String id, ExplanationKind kind) async {
     final word = wordById(id);
     if (word == null) return null;
-    final request = _startRequest(_longRequests, id);
-    final text = (await _gpt.explainWordLong(word.source)).replaceAll('*', '');
-    final applied = await _applyGenerated(
-      id,
-      requested: word.source,
-      isLatest: () => _longRequests[id] == request,
-      apply: (w) => w.copyWith(longExplanation: text),
-    );
-    return applied ? text : null;
+    final requests = _requests[kind]!;
+    final running = _running[kind]!;
+    final request = _startRequest(requests, id);
+    bool isLatest() => requests[id] == request;
+    running[id] = request;
+    _failures[kind]!.remove(id);
+    _notify();
+    final requested = word.source;
+    try {
+      final raw = kind == ExplanationKind.short
+          ? await _gpt.explainWordShort(requested)
+          : await _gpt.explainWordLong(requested);
+      final text = raw.replaceAll('*', '');
+      final applied = await _applyGenerated(
+        id,
+        requested: requested,
+        isLatest: isLatest,
+        apply: (w) => kind == ExplanationKind.short
+            ? w.copyWith(shortExplanation: text)
+            : w.copyWith(longExplanation: text),
+      );
+      return applied ? text : null;
+    } catch (e) {
+      // Only the latest request for an existing word reports its failure.
+      if (isLatest() && wordById(id) != null) _failures[kind]![id] = e;
+      return null;
+    } finally {
+      if (running[id] == request) running.remove(id);
+      _notify();
+    }
   }
 
   Future<bool> _applyGenerated(
@@ -538,3 +579,5 @@ class DictionaryViewModel extends ChangeNotifier {
 }
 
 enum SortMode { alphaAsc, alphaDesc, dateAdded }
+
+enum ExplanationKind { short, long }

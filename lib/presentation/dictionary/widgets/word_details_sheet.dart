@@ -81,35 +81,16 @@ class WordDetails extends StatefulWidget {
 
 class _WordDetailsState extends State<WordDetails> {
   int _tab = 0;
-  bool _loadingShort = false;
-  bool _loadingLong = false;
-  String? _errorShort;
-  String? _errorLong;
+  // Generation state lives in the view model, so a generation started
+  // elsewhere (e.g. right after adding the word) shows here too.
+  void _regenerateShort() =>
+      widget.vm.regenerateShortExplanation(widget.wordId);
 
-  Future<void> _regenerateShort() async {
-    setState(() {
-      _loadingShort = true;
-      _errorShort = null;
-    });
-    try {
-      await widget.vm.regenerateShortExplanation(widget.wordId);
-    } catch (e) {
-      _errorShort = _describe(e);
-    }
-    if (mounted) setState(() => _loadingShort = false);
-  }
+  void _generateLong() => widget.vm.generateLongExplanation(widget.wordId);
 
-  Future<void> _generateLong() async {
-    setState(() {
-      _loadingLong = true;
-      _errorLong = null;
-    });
-    try {
-      await widget.vm.generateLongExplanation(widget.wordId);
-    } catch (e) {
-      _errorLong = _describe(e);
-    }
-    if (mounted) setState(() => _loadingLong = false);
+  String? _errorText(ExplanationKind kind) {
+    final e = widget.vm.generationError(widget.wordId, kind);
+    return e == null ? null : _describe(e);
   }
 
   /// User-facing text for a failed generation. Never shows raw provider
@@ -136,6 +117,7 @@ class _WordDetailsState extends State<WordDetails> {
         final theme = Theme.of(context);
         final scheme = theme.colorScheme;
         final isShort = _tab == 0;
+        final kind = isShort ? ExplanationKind.short : ExplanationKind.long;
         final text = isShort ? word.shortExplanation : word.longExplanation;
 
         return Column(
@@ -213,12 +195,13 @@ class _WordDetailsState extends State<WordDetails> {
                       ? scheme.secondaryContainer
                       : scheme.tertiaryContainer,
                   text: text,
-                  loading: isShort ? _loadingShort : _loadingLong,
-                  error: isShort ? _errorShort : _errorLong,
+                  loading: widget.vm.isGenerating(widget.wordId, kind),
+                  error: _errorText(kind),
                   emptyLabel: isShort
                       ? 'Generate explanation'
                       : 'Generate in-depth explanation',
                   onGenerate: isShort ? _regenerateShort : _generateLong,
+                  aiAvailable: widget.vm.aiAvailable,
                 ),
               ),
             ),
@@ -239,6 +222,7 @@ class _ExplanationPanel extends StatefulWidget {
     required this.error,
     required this.emptyLabel,
     required this.onGenerate,
+    required this.aiAvailable,
   });
 
   final String title;
@@ -248,6 +232,9 @@ class _ExplanationPanel extends StatefulWidget {
   final String? error;
   final String emptyLabel;
   final VoidCallback onGenerate;
+
+  /// False in local mode: nothing can be generated, so nothing is offered.
+  final bool aiAvailable;
 
   @override
   State<_ExplanationPanel> createState() => _ExplanationPanelState();
@@ -292,6 +279,13 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
           icon: const Icon(Icons.refresh_rounded),
           label: const Text('Try again'),
         ),
+      );
+    } else if (!hasText && !widget.aiAvailable) {
+      body = const _Message(
+        icon: Icons.cloud_off_rounded,
+        text:
+            'AI explanations are off: no OpenAI key is set up. Your words '
+            'are still saved.',
       );
     } else if (!hasText) {
       body = _Message(
@@ -357,7 +351,7 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
                   ],
                 ),
               ),
-              if (hasText && !widget.loading) ...[
+              if (hasText && !widget.loading)
                 IconButton(
                   tooltip: _copied ? 'Copied' : 'Copy',
                   onPressed: () => _copy(text),
@@ -366,6 +360,7 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
                     size: 20,
                   ),
                 ),
+              if (hasText && !widget.loading && widget.aiAvailable) ...[
                 IconButton(
                   tooltip: 'Regenerate',
                   onPressed: widget.onGenerate,

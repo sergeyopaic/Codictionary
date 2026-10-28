@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../domain/exceptions/service_exceptions.dart';
 import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../theme/app_tokens.dart';
 import '../dictionary_view_model.dart';
@@ -46,12 +47,24 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
   late final TextEditingController _eng;
   late final TextEditingController _rus;
   Timer? _debounce;
-  bool _autoTranslate = true;
+  late bool _autoTranslate = widget.vm.translationAvailable;
   bool _translating = false;
   bool _saving = false;
   bool _rusTouched = false;
   String? _engError;
   String? _saveError;
+
+  /// Why the last automatic translation failed; shown under the RU field.
+  String? _translateError;
+
+  /// After a failed translation on save, the next save goes ahead without
+  /// one instead of failing again.
+  bool _skipTranslation = false;
+
+  /// Number of the latest translation request. A response is used only if it
+  /// answers the latest request, so a slow answer for "ca" can never replace
+  /// the one for "cat".
+  int _translation = 0;
 
   bool get _isEdit => widget.wordId != null;
 
@@ -63,7 +76,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
     _rus = TextEditingController(text: word?.target ?? '');
     // When editing, an existing translation counts as user-provided.
     _rusTouched = _isEdit && _rus.text.isNotEmpty;
-    if (!_isEdit && _eng.text.isNotEmpty) _onEngChanged(_eng.text);
+    if (!_isEdit && _eng.text.isNotEmpty) _scheduleTranslation();
   }
 
   @override
@@ -74,25 +87,93 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
     super.dispose();
   }
 
-  void _onEngChanged(String text) {
-    if (_engError != null) setState(() => _engError = null);
+  /// Drops the pending and the in-flight translation.
+  void _cancelTranslation() {
     _debounce?.cancel();
-    final trimmed = text.trim();
-    if (!_autoTranslate || _rusTouched || trimmed.isEmpty) return;
-    _debounce = Timer(const Duration(milliseconds: 500), () async {
-      setState(() => _translating = true);
-      try {
-        final translated = await widget.vm.translateToRu(trimmed);
-        if (!mounted || _rusTouched || _eng.text.trim() != trimmed) return;
-        _rus.value = TextEditingValue(
-          text: translated,
-          selection: TextSelection.collapsed(offset: translated.length),
-        );
-      } catch (_) {
-      } finally {
-        if (mounted) setState(() => _translating = false);
+    _translation++;
+    _translating = false;
+  }
+
+  void _scheduleTranslation() {
+    final text = _eng.text.trim();
+    if (!_autoTranslate || _rusTouched || text.isEmpty) return;
+    _debounce = Timer(
+      const Duration(milliseconds: 500),
+      () => _translate(text),
+    );
+  }
+
+  void _onEngChanged(String _) {
+    setState(() {
+      _engError = null;
+      _translateError = null;
+      _skipTranslation = false;
+      _cancelTranslation();
+    });
+    _scheduleTranslation();
+  }
+
+  void _onRusChanged(String text) {
+    final touched = text.trim().isNotEmpty;
+    if (touched == _rusTouched && !touched) return;
+    setState(() {
+      _rusTouched = touched;
+      // A typed translation wins over any answer still on its way.
+      if (touched) {
+        _cancelTranslation();
+        _translateError = null;
       }
     });
+  }
+
+  void _onAutoTranslateChanged(bool on) {
+    setState(() {
+      _autoTranslate = on;
+      _cancelTranslation();
+      _translateError = null;
+      _skipTranslation = false;
+    });
+    if (on) _scheduleTranslation();
+  }
+
+  bool _stillWanted(int request, String eng) =>
+      mounted &&
+      request == _translation &&
+      _autoTranslate &&
+      !_rusTouched &&
+      _eng.text.trim() == eng;
+
+  /// Translates [eng] into the RU field. Returns the translation, or null if
+  /// it failed (the reason is shown) or is no longer wanted.
+  Future<String?> _translate(String eng) async {
+    final request = ++_translation;
+    setState(() {
+      _translating = true;
+      _translateError = null;
+    });
+    try {
+      final translated = await widget.vm.translateToRu(eng);
+      if (!_stillWanted(request, eng)) return null;
+      _rus.value = TextEditingValue(
+        text: translated,
+        selection: TextSelection.collapsed(offset: translated.length),
+      );
+      return translated;
+    } catch (e) {
+      if (_stillWanted(request, eng)) {
+        setState(
+          () => _translateError =
+              'Not translated: '
+              '${e is ServiceException ? e.message : 'something went wrong.'} '
+              'Type a translation or save without one.',
+        );
+      }
+      return null;
+    } finally {
+      if (mounted && request == _translation) {
+        setState(() => _translating = false);
+      }
+    }
   }
 
   Future<void> _save() async {
@@ -107,10 +188,20 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
       _saving = true;
       _saveError = null;
     });
-    if (_autoTranslate && rus.isEmpty) {
-      try {
-        rus = await widget.vm.translateToRu(eng);
-      } catch (_) {}
+    if (_autoTranslate && rus.isEmpty && !_skipTranslation) {
+      _debounce?.cancel();
+      final translated = await _translate(eng);
+      if (!mounted) return;
+      if (translated == null) {
+        // Keep the dialog open: the user can type a translation, or press
+        // save again to keep the word without one.
+        setState(() {
+          _saving = false;
+          _skipTranslation = true;
+        });
+        return;
+      }
+      rus = translated;
     }
     final bool ok;
     try {
@@ -140,6 +231,14 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
       });
     }
   }
+
+  String get _subtitle =>
+      switch ((widget.vm.translationAvailable, widget.vm.aiAvailable)) {
+        (true, true) => 'Cody will translate and explain it for you.',
+        (true, false) => 'Cody will translate it. AI explanations are off.',
+        (false, true) => 'Type the translation; Cody will explain the word.',
+        (false, false) => 'Local mode: type the translation yourself.',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +277,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                           style: theme.textTheme.headlineSmall,
                         ),
                         Text(
-                          'Cody will translate and explain it for you.',
+                          _subtitle,
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -216,6 +315,11 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                       ? 'Filled in automatically'
                       : 'Type a translation',
                   prefixIcon: const _LangBadge('RU'),
+                  helperText: _translateError,
+                  helperMaxLines: 3,
+                  helperStyle: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.error,
+                  ),
                   suffixIcon: _translating
                       ? const Padding(
                           padding: EdgeInsets.all(14),
@@ -226,7 +330,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                         )
                       : null,
                 ),
-                onChanged: (text) => _rusTouched = text.trim().isNotEmpty,
+                onChanged: _onRusChanged,
                 onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -235,15 +339,17 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                   horizontal: AppSpacing.xs,
                 ),
                 value: _autoTranslate,
-                onChanged: _saving
+                onChanged: _saving || !widget.vm.translationAvailable
                     ? null
-                    : (v) => setState(() => _autoTranslate = v),
+                    : _onAutoTranslateChanged,
                 title: Text(
                   'Auto-translate',
                   style: theme.textTheme.titleSmall,
                 ),
                 subtitle: Text(
-                  'Translate with DeepL as you type',
+                  widget.vm.translationAvailable
+                      ? 'Translate with DeepL as you type'
+                      : 'DeepL is not set up in this app',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -259,8 +365,12 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                 ),
               ],
               const SizedBox(height: AppSpacing.lg),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              // Stacks the buttons when a long label does not fit.
+              OverflowBar(
+                alignment: MainAxisAlignment.end,
+                overflowAlignment: OverflowBarAlignment.end,
+                spacing: AppSpacing.sm,
+                overflowSpacing: AppSpacing.sm,
                 children: [
                   TextButton(
                     onPressed: _saving
@@ -268,7 +378,6 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                         : () => Navigator.of(context).pop(false),
                     child: const Text('Cancel'),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
                   FilledButton.icon(
                     onPressed: _saving ? null : _save,
                     icon: _saving
@@ -283,8 +392,12 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                             _isEdit ? Icons.check_rounded : Icons.add_rounded,
                           ),
                     label: Text(
-                      _saving
-                          ? 'Cody is thinking…'
+                      _saving && _translating
+                          ? 'Translating…'
+                          : _saving
+                          ? 'Saving…'
+                          : _skipTranslation && _rus.text.trim().isEmpty
+                          ? 'Save without translation'
                           : _isEdit
                           ? 'Save changes'
                           : 'Add word',

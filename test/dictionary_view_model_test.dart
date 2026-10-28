@@ -11,6 +11,9 @@ class _FakeGpt extends GptService {
   bool fail = false;
 
   @override
+  bool get isConfigured => true;
+
+  @override
   Future<String> explainWordShort(String word) async {
     if (fail) throw Exception('offline');
     return 'desc:$word';
@@ -62,6 +65,7 @@ void main() {
 
     // Add
     expect(await vm.addWord(eng: 'cat', rus: 'cat_ru'), isTrue);
+    await vm.whenIdle();
     expect(vm.words.length, 2);
     final added = vm.words.firstWhere((w) => w.source == 'cat');
     expect(added.shortExplanation, 'desc:cat');
@@ -72,6 +76,7 @@ void main() {
       await vm.editWord(vm.words[idx].id, eng: 'dog', rus: 'dog_ru'),
       isTrue,
     );
+    await vm.whenIdle();
 
     // Duplicate add (same eng) should be prevented
     expect(await vm.addWord(eng: 'dog', rus: 'dup_ru'), isFalse);
@@ -93,6 +98,7 @@ void main() {
   test('long explanation and creation date survive a restart', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
+    await vm.whenIdle();
     final createdAt = byEng(vm, 'resilient').createdAt;
 
     await vm.generateLongExplanation(vm.words[0].id);
@@ -106,6 +112,7 @@ void main() {
   test('editing only the translation keeps both explanations', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
+    await vm.whenIdle();
     await vm.generateLongExplanation(vm.words[0].id);
     gpt.fail = true; // nothing may be regenerated
 
@@ -120,9 +127,11 @@ void main() {
   test('changing the English word invalidates old explanations', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
+    await vm.whenIdle();
     await vm.generateLongExplanation(vm.words[0].id);
 
     await vm.editWord(vm.words[0].id, eng: 'robust', rus: 'надёжный');
+    await vm.whenIdle();
 
     final reloaded = byEng(await restart(), 'robust');
     expect(reloaded.shortExplanation, 'desc:robust');
@@ -132,10 +141,12 @@ void main() {
   test('when regeneration fails, stale explanations are not kept', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
+    await vm.whenIdle();
     await vm.generateLongExplanation(vm.words[0].id);
     gpt.fail = true;
 
     await vm.editWord(vm.words[0].id, eng: 'robust', rus: 'надёжный');
+    await vm.whenIdle();
 
     final reloaded = byEng(await restart(), 'robust');
     expect(reloaded.shortExplanation, isNull);
@@ -145,6 +156,7 @@ void main() {
   test('undo restores every field of a deleted word', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
+    await vm.whenIdle();
     await vm.generateLongExplanation(vm.words[0].id);
     final before = byEng(vm, 'resilient');
 
