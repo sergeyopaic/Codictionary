@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import 'domain/entities/word_entity.dart';
 import 'services/gpt_service.dart';
 import 'services/storage_service.dart';
 import 'services/translate_service.dart';
@@ -19,27 +18,6 @@ late final GptService gpt;
 late final TranslateService translate;
 late final StorageService storage;
 
-final List<WordEntity> _defaultWords = [
-  WordEntity(
-    id: '1',
-    source: 'apple',
-    target: 'яблоко',
-    createdAt: DateTime.now(),
-  ),
-  WordEntity(
-    id: '2',
-    source: 'dog',
-    target: 'собака',
-    createdAt: DateTime.now(),
-  ),
-  WordEntity(
-    id: '3',
-    source: 'house',
-    target: 'дом',
-    createdAt: DateTime.now(),
-  ),
-];
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
@@ -54,14 +32,7 @@ Future<void> main() async {
     ..registerLazySingleton<GptService>(() => gpt)
     ..registerLazySingleton<TranslateService>(() => translate);
 
-  runApp(
-    MyApp(
-      gpt: gpt,
-      translate: translate,
-      storage: storage,
-      defaultWords: _defaultWords,
-    ),
-  );
+  runApp(MyApp(gpt: gpt, translate: translate, storage: storage));
 }
 
 /// Root widget that wires services and hosts the adaptive [AppShell].
@@ -71,13 +42,11 @@ class MyApp extends StatelessWidget {
     required this.gpt,
     required this.translate,
     required this.storage,
-    required this.defaultWords,
   });
 
   final GptService gpt;
   final TranslateService translate;
   final StorageService storage;
-  final List<WordEntity> defaultWords;
 
   @override
   Widget build(BuildContext context) {
@@ -100,7 +69,7 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: mode,
-        home: AppShell(defaultWords: defaultWords),
+        home: const AppShell(),
       ),
     );
   }

@@ -44,7 +44,8 @@ void main() {
     gpt = ControlledGpt();
     await registerTestDependencies(storage: storage, gpt: gpt);
     vm = DictionaryViewModel();
-    await vm.load(seed: [_word('1', 'apple'), _word('2', 'zebra')]);
+    await seedWords(storage, [_word('1', 'apple'), _word('2', 'zebra')]);
+    await vm.load();
   }
 
   Future<List<WordEntity>> stored() => WordRepositoryImpl(storage).getAll();

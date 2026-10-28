@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:codictionary/core/di/service_locator.dart';
 import 'package:codictionary/data/repositories/word_repository_impl.dart';
+import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/domain/repositories/word_repository.dart';
 import 'package:codictionary/domain/usecases/add_word.dart';
 import 'package:codictionary/domain/usecases/get_all_words.dart';
@@ -33,6 +34,15 @@ Future<void> registerTestDependencies({
     ..registerLazySingleton<TranslateService>(
       () => translate ?? FakeTranslate(),
     );
+}
+
+/// Stores [words] through the real repository, as if a user had added them
+/// in an earlier session.
+Future<void> seedWords(StorageService storage, List<WordEntity> words) async {
+  final repo = WordRepositoryImpl(storage);
+  for (final w in words) {
+    await repo.create(w);
+  }
 }
 
 class FakeTranslate extends TranslateService {

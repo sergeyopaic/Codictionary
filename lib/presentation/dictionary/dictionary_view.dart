@@ -22,8 +22,7 @@ import 'widgets/word_details_sheet.dart';
 import 'widgets/word_editor_dialog.dart';
 
 class DictionaryView extends StatefulWidget {
-  final List<WordEntity> defaultWords;
-  const DictionaryView({super.key, required this.defaultWords});
+  const DictionaryView({super.key});
 
   @override
   State<DictionaryView> createState() => _DictionaryViewState();
@@ -47,7 +46,7 @@ class _DictionaryViewState extends State<DictionaryView> {
   void initState() {
     super.initState();
     vm = DictionaryViewModel();
-    vm.load(seed: widget.defaultWords).whenComplete(() {
+    vm.load().whenComplete(() {
       if (mounted) setState(() => _loaded = true);
     });
     _search.addListener(_onSearchChanged);
@@ -81,6 +80,11 @@ class _DictionaryViewState extends State<DictionaryView> {
     if (!added || !mounted) return;
     final eng = vm.words.isEmpty ? null : vm.words.last.source;
     await toasts.showWordAddedPopup(context, word: eng);
+  }
+
+  Future<void> _addExamples() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await _guard(messenger, vm.addExampleWords);
   }
 
   Future<void> _editWord(String id) async {
@@ -391,11 +395,23 @@ class _DictionaryViewState extends State<DictionaryView> {
         title: 'Your dictionary is empty',
         message:
             'Add your first word — Cody will translate it and explain how '
-            'it\'s used.',
-        action: FilledButton.icon(
-          onPressed: _addWord,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add your first word'),
+            'it\'s used. Or start with a few examples.',
+        action: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            FilledButton.icon(
+              onPressed: _addWord,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add your first word'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _addExamples,
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: const Text('Add example words'),
+            ),
+          ],
         ),
       );
     }

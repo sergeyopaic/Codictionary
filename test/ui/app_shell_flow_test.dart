@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/core/di/service_locator.dart';
 import 'package:codictionary/main.dart';
-import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/services/gpt_service.dart';
 import 'package:codictionary/services/translate_service.dart';
 
@@ -12,6 +11,15 @@ import 'package:codictionary/services/storage/storage_interface.dart';
 
 import '../fakes/json_storage_service.dart';
 import '../fakes/memory_backend.dart';
+
+final _apple = <Map<String, dynamic>>[
+  {
+    'id': '1',
+    'eng': 'apple',
+    'rus': 'яблоко',
+    'addedAt': '2025-01-01T00:00:00.000Z',
+  },
+];
 
 Future<void> _pumpApp(
   WidgetTester tester,
@@ -25,15 +33,7 @@ Future<void> _pumpApp(
     MyApp(
       gpt: GptService(''),
       translate: TranslateService(''),
-      storage: storage ?? JsonStorageService(),
-      defaultWords: [
-        WordEntity(
-          id: '1',
-          source: 'apple',
-          target: 'яблоко',
-          createdAt: DateTime.now(),
-        ),
-      ],
+      storage: storage ?? JsonStorageService(rawWords: _apple),
     ),
   );
   await tester.pumpAndSettle();
@@ -102,5 +102,24 @@ void main() {
 
     expect(find.text('pear'), findsOneWidget);
     expect(find.text('Your dictionary file is damaged'), findsNothing);
+  });
+
+  testWidgets('empty dictionary offers example words on request', (
+    tester,
+  ) async {
+    await _pumpApp(
+      tester,
+      const Size(1400, 900),
+      storage: JsonStorageService(),
+    );
+
+    expect(find.text('Your dictionary is empty'), findsOneWidget);
+    expect(find.text('apple'), findsNothing, reason: 'no automatic demo words');
+
+    await tester.tap(find.text('Add example words'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('serendipity'), findsOneWidget);
+    expect(find.text('Your dictionary is empty'), findsNothing);
   });
 }

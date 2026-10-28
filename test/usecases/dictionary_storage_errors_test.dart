@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
 import 'package:codictionary/models/word.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
@@ -32,22 +31,10 @@ String _stored(List<String> words) => jsonEncode([
     ).toMap(),
 ]);
 
-final _demo = [
-  WordEntity(
-    id: 'd',
-    source: 'demo',
-    target: 'демо',
-    createdAt: DateTime.utc(2025),
-  ),
-];
-
 void main() {
   late MemoryBackend backend;
 
-  Future<DictionaryViewModel> start(
-    Map<String, String> values, {
-    List<WordEntity> seed = const [],
-  }) async {
+  Future<DictionaryViewModel> start(Map<String, String> values) async {
     backend = MemoryBackend(values);
     await registerTestDependencies(
       storage: SafeJsonStorage(
@@ -58,12 +45,12 @@ void main() {
       gpt: _Gpt(),
     );
     final vm = DictionaryViewModel();
-    await vm.load(seed: seed);
+    await vm.load();
     return vm;
   }
 
-  test('damaged storage is reported and not replaced by demo words', () async {
-    final vm = await start({_key: 'garbage'}, seed: _demo);
+  test('damaged storage is reported and nothing is written', () async {
+    final vm = await start({_key: 'garbage'});
 
     expect(vm.loadError, isA<StorageCorruptedException>());
     expect(vm.words, isEmpty);

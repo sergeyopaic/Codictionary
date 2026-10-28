@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/entities/word_entity.dart';
 import '../dictionary/dictionary_view.dart';
 import '../theme/app_tokens.dart';
 import '../theme/theme_controller.dart';
@@ -26,9 +25,7 @@ const _destinations = [
 /// Adaptive app frame: a sidebar on wide screens, a bottom navigation bar on
 /// narrow ones. Pages are kept alive in an [IndexedStack].
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.defaultWords});
-
-  final List<WordEntity> defaultWords;
+  const AppShell({super.key});
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -42,10 +39,7 @@ class _AppShellState extends State<AppShell> {
     final wide = AppBreakpoints.isWide(context);
     final pages = IndexedStack(
       index: _index,
-      children: [
-        DictionaryView(defaultWords: widget.defaultWords),
-        const VocabsView(),
-      ],
+      children: [const DictionaryView(), const VocabsView()],
     );
 
     if (!wide) {

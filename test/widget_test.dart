@@ -10,7 +10,6 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/main.dart';
-import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/services/gpt_service.dart';
 import 'package:codictionary/services/translate_service.dart';
 
@@ -30,21 +29,12 @@ void main() {
       tester.view.physicalSize = previousSize;
     });
     final storage = JsonStorageService();
-    final defaults = [
-      WordEntity(
-        id: '1',
-        source: 'apple',
-        target: 'яблоко',
-        createdAt: DateTime.now(),
-      ),
-    ];
 
     await tester.pumpWidget(
       MyApp(
         gpt: GptService(''),
         translate: TranslateService(''),
         storage: storage,
-        defaultWords: defaults,
       ),
     );
 

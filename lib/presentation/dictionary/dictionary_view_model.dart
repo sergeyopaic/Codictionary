@@ -12,6 +12,7 @@ import '../../domain/usecases/restore_word.dart';
 import '../../domain/usecases/update_word.dart';
 import '../../services/gpt_service.dart';
 import '../../services/translate_service.dart';
+import 'example_words.dart';
 
 class DictionaryViewModel extends ChangeNotifier {
   final GetAllWords _getAll;
@@ -76,19 +77,12 @@ class DictionaryViewModel extends ChangeNotifier {
     return null;
   }
 
-  Future<void> load({List<WordEntity> seed = const []}) async {
+  /// Loads the stored words. Never adds anything: an empty dictionary (first
+  /// run or after deleting every word) stays empty. Example words are only
+  /// added by [addExampleWords].
+  Future<void> load() async {
     try {
-      final list = await _getAll();
-      if (list.isEmpty && seed.isNotEmpty) {
-        // Seed defaults with their own ids and dates. Only reached when the
-        // data was read successfully, never after a read failure.
-        for (final w in seed) {
-          await _restoreWord(w);
-        }
-        words = List.of(seed);
-      } else {
-        words = List.of(list);
-      }
+      words = List.of(await _getAll());
       loadError = null;
     } on StorageException catch (e) {
       words = [];
@@ -316,6 +310,29 @@ class DictionaryViewModel extends ChangeNotifier {
     } finally {
       _pendingAdds.remove(key);
     }
+  }
+
+  /// Adds the built-in example words the user asked for, skipping any that
+  /// are already in the dictionary. They come with explanations, so no AI
+  /// request is made. Returns how many were added. Throws a
+  /// [StorageException] if saving fails; words saved before that stay.
+  Future<int> addExampleWords() async {
+    var added = 0;
+    for (final example in exampleWords) {
+      if (_existsInCurrentVocab(example.source)) continue;
+      final word = await _addWord(
+        AddWordParams(
+          source: example.source,
+          target: example.target,
+          shortExplanation: example.explanation,
+        ),
+      );
+      words.add(word);
+      added++;
+      _applyFilter();
+      _notify();
+    }
+    return added;
   }
 
   /// Saves the edited English word and translation. Returns false if the word

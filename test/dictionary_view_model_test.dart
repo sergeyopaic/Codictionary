@@ -55,7 +55,8 @@ void main() {
       ),
     ];
 
-    await vm.load(seed: seed);
+    await seedWords(storage, seed);
+    await vm.load();
     expect(vm.words.length, 1);
     expect(vm.words.first.source, 'apple');
 
@@ -155,17 +156,16 @@ void main() {
 
   test('regenerated explanation reaches the grid (filtered list)', () async {
     final vm = DictionaryViewModel();
-    await vm.load(
-      seed: [
-        WordEntity(
-          id: '1',
-          source: 'apple',
-          target: 'apple_ru',
-          shortExplanation: 'old',
-          createdAt: DateTime.now(),
-        ),
-      ],
-    );
+    await seedWords(storage, [
+      WordEntity(
+        id: '1',
+        source: 'apple',
+        target: 'apple_ru',
+        shortExplanation: 'old',
+        createdAt: DateTime.now(),
+      ),
+    ]);
+    await vm.load();
 
     await vm.regenerateShortExplanation('1');
 
