@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../domain/exceptions/service_exceptions.dart';
 import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../theme/app_tokens.dart';
 import '../dictionary_view_model.dart';
@@ -111,9 +112,14 @@ class _WordDetailsState extends State<WordDetails> {
     if (mounted) setState(() => _loadingLong = false);
   }
 
-  static String _describe(Object e) => e is StorageException
-      ? 'The explanation was generated but could not be saved.\n${e.message}'
-      : 'Cody couldn\'t reach the AI service.\n$e';
+  /// User-facing text for a failed generation. Never shows raw provider
+  /// responses or exception dumps.
+  static String _describe(Object e) => switch (e) {
+    StorageException() =>
+      'The explanation was generated but could not be saved.\n${e.message}',
+    ServiceException() => e.message,
+    _ => 'Something went wrong. Try again.',
+  };
 
   void _close(VoidCallback then) {
     Navigator.of(context).pop();
