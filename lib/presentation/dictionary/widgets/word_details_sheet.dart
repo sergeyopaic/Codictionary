@@ -84,17 +84,13 @@ class _WordDetailsState extends State<WordDetails> {
   String? _errorShort;
   String? _errorLong;
 
-  int get _index => widget.vm.words.indexWhere((w) => w.id == widget.wordId);
-
   Future<void> _regenerateShort() async {
-    final i = _index;
-    if (i < 0) return;
     setState(() {
       _loadingShort = true;
       _errorShort = null;
     });
     try {
-      await widget.vm.regenerateDescription(i);
+      await widget.vm.regenerateShortExplanation(widget.wordId);
     } catch (e) {
       _errorShort = '$e';
     }
@@ -102,14 +98,12 @@ class _WordDetailsState extends State<WordDetails> {
   }
 
   Future<void> _generateLong() async {
-    final i = _index;
-    if (i < 0) return;
     setState(() {
       _loadingLong = true;
       _errorLong = null;
     });
     try {
-      await widget.vm.generateOrRegenerateLong(i);
+      await widget.vm.generateLongExplanation(widget.wordId);
     } catch (e) {
       _errorLong = '$e';
     }
@@ -126,9 +120,8 @@ class _WordDetailsState extends State<WordDetails> {
     return ListenableBuilder(
       listenable: widget.vm,
       builder: (context, _) {
-        final i = _index;
-        if (i < 0) return const SizedBox.shrink();
-        final word = widget.vm.words[i];
+        final word = widget.vm.wordById(widget.wordId);
+        if (word == null) return const SizedBox.shrink();
         final theme = Theme.of(context);
         final scheme = theme.colorScheme;
         final isShort = _tab == 0;

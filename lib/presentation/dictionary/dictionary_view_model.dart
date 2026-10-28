@@ -37,6 +37,37 @@ class DictionaryViewModel extends ChangeNotifier {
   final Set<String> selected = {};
   SortMode currentSort = SortMode.alphaAsc;
 
+  /// Normalized English words whose add is in flight (awaiting AI/storage).
+  final Set<String> _pendingAdds = {};
+
+  /// Latest AI request per word id. A response is applied only if it belongs
+  /// to the latest request, so an older, slower response cannot overwrite a
+  /// newer one.
+  final Map<String, int> _shortRequests = {};
+  final Map<String, int> _longRequests = {};
+  int _requestCounter = 0;
+
+  bool _disposed = false;
+
+  /// Safe after [dispose]: pending operations still persist, but stop
+  /// notifying a widget tree that is gone.
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  WordEntity? wordById(String id) {
+    for (final w in words) {
+      if (w.id == id) return w;
+    }
+    return null;
+  }
+
   Future<void> load({List<WordEntity> seed = const []}) async {
     final list = await _getAll();
     if (list.isEmpty && seed.isNotEmpty) {
@@ -49,20 +80,20 @@ class DictionaryViewModel extends ChangeNotifier {
       words = List.of(list);
     }
     _applyFilter();
-    notifyListeners();
+    _notify();
   }
 
   void reorder(int oldIndex, int newIndex) {
     final item = filtered.removeAt(oldIndex);
     filtered.insert(newIndex, item);
     words = List<WordEntity>.from(filtered);
-    notifyListeners();
+    _notify();
   }
 
   void toggleSelectionMode(bool enabled) {
     selectionMode = enabled;
     if (!enabled) selected.clear();
-    notifyListeners();
+    _notify();
   }
 
   void toggleSelect(String id) {
@@ -72,12 +103,12 @@ class DictionaryViewModel extends ChangeNotifier {
     } else {
       selected.add(id);
     }
-    notifyListeners();
+    _notify();
   }
 
   void clearSelection() {
     selected.clear();
-    notifyListeners();
+    _notify();
   }
 
   int get selectedCount => selected.length;
@@ -89,7 +120,7 @@ class DictionaryViewModel extends ChangeNotifier {
     selected
       ..clear()
       ..addAll(filtered.map((e) => e.id));
-    notifyListeners();
+    _notify();
   }
 
   Future<void> deleteSelected() async {
@@ -100,7 +131,7 @@ class DictionaryViewModel extends ChangeNotifier {
       await deleteById(id);
     }
     selected.clear();
-    notifyListeners();
+    _notify();
   }
 
   void setSort(SortMode mode) {
@@ -123,13 +154,13 @@ class DictionaryViewModel extends ChangeNotifier {
         break;
     }
     _applyFilter();
-    notifyListeners();
+    _notify();
   }
 
   void onQueryChanged(String q) {
     query = q.trim().toLowerCase();
     _applyFilter();
-    notifyListeners();
+    _notify();
   }
 
   void _applyFilter() {
@@ -195,28 +226,18 @@ class DictionaryViewModel extends ChangeNotifier {
     return out;
   }
 
-  String _normalizeRus(String s) {
-    var out = s.trim().toLowerCase();
-    // Collapse non-letters/digits to single spaces to avoid minor punctuation differences
-    out = out.replaceAll(RegExp(r'[^\p{L}0-9]+', unicode: true), ' ').trim();
-    out = out.replaceAll(RegExp(r'\s+'), ' ');
-    return out;
+  /// The English word is the key: the same normalized English may exist only
+  /// once, counting words that are still being added.
+  bool _existsInCurrentVocab(String eng, {String? exceptId}) {
+    final key = _normalizeEng(eng);
+    return _pendingAdds.contains(key) || _hasSource(key, exceptId: exceptId);
   }
 
-  bool _existsInCurrentVocab(String eng, String rus, {String? exceptId}) {
-    final nEng = _normalizeEng(eng);
-    final nRus = _normalizeRus(rus);
-    return words.any((w) {
-      if (w.id == (exceptId ?? '')) return false;
-      // Block if same English already exists in this vocabulary (primary key)
-      if (_normalizeEng(w.source) == nEng) return true;
-      // Optionally also block if exact same pair already exists
-      if (_normalizeEng(w.source) == nEng && _normalizeRus(w.target) == nRus) {
-        return true;
-      }
-      return false;
-    });
-  }
+  bool _hasSource(String key, {String? exceptId}) =>
+      words.any((w) => w.id != exceptId && _normalizeEng(w.source) == key);
+
+  int _startRequest(Map<String, int> requests, String id) =>
+      requests[id] = ++_requestCounter;
 
   Future<String?> _tryExplainShort(String eng) async {
     try {
@@ -226,46 +247,77 @@ class DictionaryViewModel extends ChangeNotifier {
     }
   }
 
-  /// Replaces the in-memory copy of [word] and persists it.
+  /// Replaces the in-memory copy of [word] and persists it. A word that was
+  /// deleted (or is being deleted) is never brought back.
   Future<void> _save(WordEntity word) async {
+    if (removing.contains(word.id)) return;
     final i = words.indexWhere((w) => w.id == word.id);
     if (i < 0) return;
     words[i] = word;
     _applyFilter();
-    notifyListeners();
-    await _updateWord(word);
+    _notify();
+    try {
+      await _updateWord(word);
+    } on WordNotFoundException {
+      // Deleted from storage meanwhile; the delete wins.
+    }
   }
 
   Future<bool> addWord({required String eng, required String rus}) async {
-    if (_existsInCurrentVocab(eng, rus)) {
-      return false;
+    if (_existsInCurrentVocab(eng)) return false;
+    // Reserve the word before the first await so a second add of the same
+    // word (double submit) is rejected instead of creating a duplicate.
+    final key = _normalizeEng(eng);
+    _pendingAdds.add(key);
+    try {
+      final desc = await _tryExplainShort(eng);
+      // Re-check at commit: an Undo may have restored the same word.
+      if (_hasSource(key)) return false;
+      final word = await _addWord(
+        AddWordParams(source: eng, target: rus, shortExplanation: desc),
+      );
+      words.add(word);
+      _applyFilter();
+      _notify();
+      return true;
+    } finally {
+      _pendingAdds.remove(key);
     }
-    final desc = await _tryExplainShort(eng);
-    final word = await _addWord(
-      AddWordParams(source: eng, target: rus, shortExplanation: desc),
-    );
-    words.add(word);
-    _applyFilter();
-    notifyListeners();
-    return true;
   }
 
+  /// Saves the edited English word and translation. Returns false if the word
+  /// would duplicate another one or was deleted while the edit was running.
   Future<bool> editWord(
-    int index, {
+    String id, {
     required String eng,
     required String rus,
   }) async {
-    final original = words[index];
-    if (_existsInCurrentVocab(eng, rus, exceptId: original.id)) {
+    final original = wordById(id);
+    if (original == null || _existsInCurrentVocab(eng, exceptId: id)) {
       return false;
     }
-    var updated = original.copyWith(source: eng, target: rus);
     // Explanations describe the English word. When it changes they are stale:
     // drop both and try to generate a fresh short one. A translation-only
     // edit keeps them.
-    if (_normalizeEng(eng) != _normalizeEng(original.source)) {
+    final sourceChanged = _normalizeEng(eng) != _normalizeEng(original.source);
+    String? newShort;
+    int? shortRequest;
+    if (sourceChanged) {
+      shortRequest = _startRequest(_shortRequests, id);
+      _startRequest(_longRequests, id); // cancels an in-flight long request
+      newShort = await _tryExplainShort(eng);
+    }
+
+    // Apply to the current version of the word, not the one we started with.
+    final current = wordById(id);
+    if (current == null || removing.contains(id)) return false;
+    if (_hasSource(_normalizeEng(eng), exceptId: id)) return false;
+    var updated = current.copyWith(source: eng, target: rus);
+    if (sourceChanged) {
       updated = updated.copyWith(
-        shortExplanation: await _tryExplainShort(eng),
+        // If a newer request for this word started meanwhile, it will fill
+        // the explanation in; ours is outdated.
+        shortExplanation: _shortRequests[id] == shortRequest ? newShort : null,
         longExplanation: null,
       );
     }
@@ -274,24 +326,26 @@ class DictionaryViewModel extends ChangeNotifier {
   }
 
   Future<void> deleteById(String id) async {
-    final idx = words.indexWhere((w) => w.id == id);
-    if (idx < 0) return;
+    // Idempotent: a second delete of the same id (double tap, bulk delete
+    // racing a single delete) does nothing.
+    if (removing.contains(id) || wordById(id) == null) return;
     removing.add(id);
-    notifyListeners();
+    _notify();
     await Future.delayed(const Duration(milliseconds: 200));
     removing.remove(id);
     words.removeWhere((w) => w.id == id);
+    selected.remove(id);
     _applyFilter();
-    notifyListeners();
+    _notify();
     await _removeWord(id);
   }
 
   /// Puts a deleted word back with all of its fields (Undo).
   Future<void> restoreWord(WordEntity w) async {
-    if (words.any((e) => e.id == w.id)) return;
+    if (wordById(w.id) != null) return;
     words.add(w);
     _applyFilter();
-    notifyListeners();
+    _notify();
     try {
       await _restoreWord(w);
     } on WordAlreadyExistsException {
@@ -309,18 +363,54 @@ class DictionaryViewModel extends ChangeNotifier {
     return _translate.translateToRu(eng);
   }
 
-  Future<String> regenerateDescription(int index) async {
-    final word = words[index];
+  /// Generates a new short explanation. Returns null if the result was
+  /// discarded because the word changed, was deleted or a newer request
+  /// started. Provider errors are rethrown for the UI to show.
+  Future<String?> regenerateShortExplanation(String id) async {
+    final word = wordById(id);
+    if (word == null) return null;
+    final request = _startRequest(_shortRequests, id);
     final text = (await _gpt.explainWordShort(word.source)).replaceAll('*', '');
-    await _save(word.copyWith(shortExplanation: text));
-    return text;
+    final applied = await _applyGenerated(
+      id,
+      requested: word.source,
+      isLatest: () => _shortRequests[id] == request,
+      apply: (w) => w.copyWith(shortExplanation: text),
+    );
+    return applied ? text : null;
   }
 
-  Future<String> generateOrRegenerateLong(int index) async {
-    final word = words[index];
+  /// Same as [regenerateShortExplanation] for the detailed explanation.
+  Future<String?> generateLongExplanation(String id) async {
+    final word = wordById(id);
+    if (word == null) return null;
+    final request = _startRequest(_longRequests, id);
     final text = (await _gpt.explainWordLong(word.source)).replaceAll('*', '');
-    await _save(word.copyWith(longExplanation: text));
-    return text;
+    final applied = await _applyGenerated(
+      id,
+      requested: word.source,
+      isLatest: () => _longRequests[id] == request,
+      apply: (w) => w.copyWith(longExplanation: text),
+    );
+    return applied ? text : null;
+  }
+
+  Future<bool> _applyGenerated(
+    String id, {
+    required String requested,
+    required bool Function() isLatest,
+    required WordEntity Function(WordEntity current) apply,
+  }) async {
+    final current = wordById(id);
+    if (current == null || removing.contains(id) || !isLatest()) return false;
+    // The text explains [requested]; don't attach it to a renamed word.
+    // editWord already invalidates requests when the English word changes,
+    // so this is a backstop for any future path that renames a word.
+    if (_normalizeEng(current.source) != _normalizeEng(requested)) {
+      return false;
+    }
+    await _save(apply(current));
+    return true;
   }
 }
 

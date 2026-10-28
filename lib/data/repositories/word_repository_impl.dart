@@ -6,42 +6,55 @@ import '../../domain/repositories/word_repository.dart';
 import '../../services/storage/storage_interface.dart' as legacy;
 import '../../models/word.dart' as record;
 
+/// Every operation reads the whole list, changes it and writes it back. Two
+/// such cycles running at once would lose one of the changes, so operations
+/// run strictly one after another. The app registers a single instance in DI;
+/// separate instances over the same storage are not coordinated.
 class WordRepositoryImpl implements WordRepository {
   final legacy.StorageService storage;
   WordRepositoryImpl(this.storage);
 
-  @override
-  Future<List<WordEntity>> getAll() async {
-    final records = await _loadNormalized();
-    return records.map(_toEntity).toList(growable: false);
+  Future<void> _tail = Future.value();
+
+  Future<T> _serialized<T>(Future<T> Function() op) {
+    final result = _tail.then((_) => op());
+    // A failed operation must not block the ones queued after it.
+    _tail = result.then<void>((_) {}, onError: (_) {});
+    return result;
   }
 
   @override
-  Future<void> create(WordEntity word) async {
+  Future<List<WordEntity>> getAll() => _serialized(() async {
+    final records = await _loadNormalized();
+    return records.map(_toEntity).toList(growable: false);
+  });
+
+  @override
+  Future<void> create(WordEntity word) => _serialized(() async {
     final records = await _loadNormalized();
     if (records.any((r) => r.id == word.id)) {
       throw WordAlreadyExistsException(word.id);
     }
     await storage.saveWords([...records, _toRecord(word)]);
-  }
+  });
 
   @override
-  Future<void> update(WordEntity word) async {
+  Future<void> update(WordEntity word) => _serialized(() async {
     final records = await _loadNormalized();
     final i = records.indexWhere((r) => r.id == word.id);
     if (i < 0) throw WordNotFoundException(word.id);
     // The creation date belongs to the stored record, never to the caller.
     records[i] = _toRecord(word, createdAt: records[i].addedAt);
     await storage.saveWords(records);
-  }
+  });
 
   @override
-  Future<void> remove(String id) async {
+  Future<void> remove(String id) => _serialized(() async {
     final records = await _loadNormalized();
     final remaining = records.where((r) => r.id != id).toList();
     if (remaining.length == records.length) return;
     await storage.saveWords(remaining);
-  }
+  });
 
   /// Loads stored records and repairs empty or duplicate ids. Without this,
   /// an empty id gets a new random id on every load and duplicates make

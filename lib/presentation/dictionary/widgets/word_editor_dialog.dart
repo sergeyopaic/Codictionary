@@ -9,14 +9,14 @@ import '../dictionary_view_model.dart';
 Future<bool> showWordEditorDialog(
   BuildContext context, {
   required DictionaryViewModel vm,
-  int? index,
+  String? wordId,
   String? initialEng,
 }) async {
   return (await showDialog<bool>(
         context: context,
         barrierDismissible: true,
         builder: (_) =>
-            WordEditorDialog(vm: vm, index: index, initialEng: initialEng),
+            WordEditorDialog(vm: vm, wordId: wordId, initialEng: initialEng),
       )) ??
       false;
 }
@@ -25,14 +25,14 @@ class WordEditorDialog extends StatefulWidget {
   const WordEditorDialog({
     super.key,
     required this.vm,
-    this.index,
+    this.wordId,
     this.initialEng,
   });
 
   final DictionaryViewModel vm;
 
-  /// Index into [DictionaryViewModel.words]; null to add a new word.
-  final int? index;
+  /// Id of the word to edit; null to add a new word.
+  final String? wordId;
 
   /// Prefills the English field when adding a new word.
   final String? initialEng;
@@ -51,12 +51,12 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
   bool _rusTouched = false;
   String? _engError;
 
-  bool get _isEdit => widget.index != null;
+  bool get _isEdit => widget.wordId != null;
 
   @override
   void initState() {
     super.initState();
-    final word = _isEdit ? widget.vm.words[widget.index!] : null;
+    final word = _isEdit ? widget.vm.wordById(widget.wordId!) : null;
     _eng = TextEditingController(text: word?.source ?? widget.initialEng ?? '');
     _rus = TextEditingController(text: word?.target ?? '');
     // When editing, an existing translation counts as user-provided.
@@ -108,11 +108,14 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
       } catch (_) {}
     }
     final ok = _isEdit
-        ? await widget.vm.editWord(widget.index!, eng: eng, rus: rus)
+        ? await widget.vm.editWord(widget.wordId!, eng: eng, rus: rus)
         : await widget.vm.addWord(eng: eng, rus: rus);
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).pop(true);
+    } else if (_isEdit && widget.vm.wordById(widget.wordId!) == null) {
+      // The word was deleted while the dialog was saving.
+      Navigator.of(context).pop(false);
     } else {
       setState(() {
         _saving = false;

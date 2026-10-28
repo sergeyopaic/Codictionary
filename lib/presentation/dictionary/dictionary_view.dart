@@ -82,10 +82,9 @@ class _DictionaryViewState extends State<DictionaryView> {
   }
 
   Future<void> _editWord(String id) async {
-    final idx = vm.words.indexWhere((w) => w.id == id);
-    if (idx < 0) return;
+    if (vm.wordById(id) == null) return;
     final messenger = ScaffoldMessenger.of(context);
-    final saved = await showWordEditorDialog(context, vm: vm, index: idx);
+    final saved = await showWordEditorDialog(context, vm: vm, wordId: id);
     if (!saved) return;
     messenger.showSnackBar(const SnackBar(content: Text('Word updated.')));
   }

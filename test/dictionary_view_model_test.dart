@@ -1,18 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:codictionary/core/di/service_locator.dart';
-import 'package:codictionary/data/repositories/word_repository_impl.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
-import 'package:codictionary/domain/repositories/word_repository.dart';
-import 'package:codictionary/domain/usecases/add_word.dart';
-import 'package:codictionary/domain/usecases/get_all_words.dart';
-import 'package:codictionary/domain/usecases/remove_word.dart';
-import 'package:codictionary/domain/usecases/restore_word.dart';
-import 'package:codictionary/domain/usecases/update_word.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
 import 'package:codictionary/services/gpt_service.dart';
-import 'package:codictionary/services/translate_service.dart';
 
 import 'fakes/json_storage_service.dart';
+import 'helpers/test_dependencies.dart';
 
 class _FakeGpt extends GptService {
   _FakeGpt() : super('');
@@ -31,29 +23,14 @@ class _FakeGpt extends GptService {
   }
 }
 
-class _FakeTranslate extends TranslateService {
-  _FakeTranslate() : super('');
-  @override
-  Future<String> translateToRu(String eng) async => 'ru:$eng';
-}
-
 void main() {
   late JsonStorageService storage;
   late _FakeGpt gpt;
 
   setUp(() async {
-    await sl.reset();
     storage = JsonStorageService();
     gpt = _FakeGpt();
-    sl
-      ..registerLazySingleton<WordRepository>(() => WordRepositoryImpl(storage))
-      ..registerFactory<GetAllWords>(() => GetAllWords(sl()))
-      ..registerFactory<AddWord>(() => AddWord(sl()))
-      ..registerFactory<UpdateWord>(() => UpdateWord(sl()))
-      ..registerFactory<RestoreWord>(() => RestoreWord(sl()))
-      ..registerFactory<RemoveWord>(() => RemoveWord(sl()))
-      ..registerLazySingleton<GptService>(() => gpt)
-      ..registerLazySingleton<TranslateService>(() => _FakeTranslate());
+    await registerTestDependencies(storage: storage, gpt: gpt);
   });
 
   /// A fresh view model over the same storage, i.e. an app restart.
@@ -90,7 +67,10 @@ void main() {
 
     // Edit
     final idx = vm.words.indexWhere((w) => w.source == 'cat');
-    expect(await vm.editWord(idx, eng: 'dog', rus: 'dog_ru'), isTrue);
+    expect(
+      await vm.editWord(vm.words[idx].id, eng: 'dog', rus: 'dog_ru'),
+      isTrue,
+    );
 
     // Duplicate add (same eng) should be prevented
     expect(await vm.addWord(eng: 'dog', rus: 'dup_ru'), isFalse);
@@ -114,7 +94,7 @@ void main() {
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
     final createdAt = byEng(vm, 'resilient').createdAt;
 
-    await vm.generateOrRegenerateLong(0);
+    await vm.generateLongExplanation(vm.words[0].id);
 
     final reloaded = byEng(await restart(), 'resilient');
     expect(reloaded.shortExplanation, 'desc:resilient');
@@ -125,10 +105,10 @@ void main() {
   test('editing only the translation keeps both explanations', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
-    await vm.generateOrRegenerateLong(0);
+    await vm.generateLongExplanation(vm.words[0].id);
     gpt.fail = true; // nothing may be regenerated
 
-    await vm.editWord(0, eng: 'resilient', rus: 'устойчивый');
+    await vm.editWord(vm.words[0].id, eng: 'resilient', rus: 'устойчивый');
 
     final reloaded = byEng(await restart(), 'resilient');
     expect(reloaded.target, 'устойчивый');
@@ -139,9 +119,9 @@ void main() {
   test('changing the English word invalidates old explanations', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
-    await vm.generateOrRegenerateLong(0);
+    await vm.generateLongExplanation(vm.words[0].id);
 
-    await vm.editWord(0, eng: 'robust', rus: 'надёжный');
+    await vm.editWord(vm.words[0].id, eng: 'robust', rus: 'надёжный');
 
     final reloaded = byEng(await restart(), 'robust');
     expect(reloaded.shortExplanation, 'desc:robust');
@@ -151,10 +131,10 @@ void main() {
   test('when regeneration fails, stale explanations are not kept', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
-    await vm.generateOrRegenerateLong(0);
+    await vm.generateLongExplanation(vm.words[0].id);
     gpt.fail = true;
 
-    await vm.editWord(0, eng: 'robust', rus: 'надёжный');
+    await vm.editWord(vm.words[0].id, eng: 'robust', rus: 'надёжный');
 
     final reloaded = byEng(await restart(), 'robust');
     expect(reloaded.shortExplanation, isNull);
@@ -164,7 +144,7 @@ void main() {
   test('undo restores every field of a deleted word', () async {
     final vm = await restart();
     await vm.addWord(eng: 'resilient', rus: 'стойкий');
-    await vm.generateOrRegenerateLong(0);
+    await vm.generateLongExplanation(vm.words[0].id);
     final before = byEng(vm, 'resilient');
 
     await vm.deleteById(before.id);
@@ -187,7 +167,7 @@ void main() {
       ],
     );
 
-    await vm.regenerateDescription(0);
+    await vm.regenerateShortExplanation('1');
 
     expect(vm.words.first.shortExplanation, 'desc:apple');
     expect(vm.filtered.first.shortExplanation, 'desc:apple');
