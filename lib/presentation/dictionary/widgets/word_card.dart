@@ -12,6 +12,7 @@ class WordCard extends StatefulWidget {
     required this.selectionMode,
     required this.selected,
     required this.onTap,
+    this.onLongPress,
     required this.onToggleSelect,
     required this.onExplain,
     required this.onEdit,
@@ -22,6 +23,9 @@ class WordCard extends StatefulWidget {
   final bool selectionMode;
   final bool selected;
   final VoidCallback onTap;
+
+  /// Only set when dragging is unavailable; otherwise long-press starts a drag.
+  final VoidCallback? onLongPress;
   final VoidCallback onToggleSelect;
   final VoidCallback onExplain;
   final VoidCallback onEdit;
@@ -74,6 +78,7 @@ class _WordCardState extends State<WordCard> {
           child: InkWell(
             borderRadius: BorderRadius.circular(AppRadius.lg),
             onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
+            onLongPress: widget.onLongPress,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg + 2,

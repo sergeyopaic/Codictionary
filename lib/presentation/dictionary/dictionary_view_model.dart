@@ -8,6 +8,7 @@ import '../../domain/usecases/add_word.dart';
 import '../../domain/usecases/get_all_words.dart';
 import '../../domain/usecases/recover_words.dart';
 import '../../domain/usecases/remove_word.dart';
+import '../../domain/usecases/reorder_words.dart';
 import '../../domain/usecases/restore_word.dart';
 import '../../domain/usecases/update_word.dart';
 import '../../services/gpt_service.dart';
@@ -21,6 +22,7 @@ class DictionaryViewModel extends ChangeNotifier {
   final RestoreWord _restoreWord;
   final RemoveWord _removeWord;
   final RecoverWords _recoverWords;
+  final ReorderWords _reorderWords;
   final GptService _gpt;
   final TranslateService _translate;
 
@@ -31,16 +33,29 @@ class DictionaryViewModel extends ChangeNotifier {
       _restoreWord = sl(),
       _removeWord = sl(),
       _recoverWords = sl(),
+      _reorderWords = sl(),
       _gpt = sl(),
       _translate = sl();
 
+  /// All words in the user's manual order, as stored. Sorting and search
+  /// never change this list; only [reorder] does.
   List<WordEntity> words = [];
+
+  /// What the grid shows: [words] filtered by [query] and sorted by
+  /// [sortMode].
   List<WordEntity> filtered = [];
   String query = '';
   final Set<String> removing = {};
   bool selectionMode = false;
   final Set<String> selected = {};
-  SortMode currentSort = SortMode.alphaAsc;
+
+  /// Temporary sort for display; null shows the manual order.
+  SortMode? sortMode;
+
+  /// Where deleted words were in the manual order, so Undo puts them back
+  /// in place. `seq` orders deletions for multi-word Undo.
+  final Map<String, ({int index, int seq})> _deletedAt = {};
+  int _deleteSeq = 0;
 
   /// Set when stored words could not be loaded. While set, the dictionary
   /// is not usable and nothing is written, so damaged data stays as is.
@@ -99,11 +114,37 @@ class DictionaryViewModel extends ChangeNotifier {
     await load();
   }
 
-  void reorder(int oldIndex, int newIndex) {
-    final item = filtered.removeAt(oldIndex);
-    filtered.insert(newIndex, item);
-    words = List<WordEntity>.from(filtered);
+  /// Drag and drop is only meaningful on the full list in manual order:
+  /// while searching or sorted, the shown list is not the manual order.
+  bool get canReorder =>
+      sortMode == null && query.isEmpty && !selectionMode && loadError == null;
+
+  /// Why dragging is not available right now, for a hint in the UI.
+  String? get reorderBlockedReason {
+    if (query.isNotEmpty) return 'Clear the search to reorder words.';
+    if (sortMode != null) return 'Turn off sorting to reorder words.';
+    return null;
+  }
+
+  /// Moves a word in the manual order and saves it. Ignored when
+  /// [canReorder] is false. On a storage failure the move is undone and the
+  /// [StorageException] rethrown.
+  Future<void> reorder(int oldIndex, int newIndex) async {
+    if (!canReorder) return;
+    if (oldIndex < 0 || oldIndex >= words.length) return;
+    final previous = List.of(words);
+    final item = words.removeAt(oldIndex);
+    words.insert(newIndex.clamp(0, words.length), item);
+    _applyFilter();
     _notify();
+    try {
+      await _reorderWords([for (final w in words) w.id]);
+    } on StorageException {
+      words = previous;
+      _applyFilter();
+      _notify();
+      rethrow;
+    }
   }
 
   void toggleSelectionMode(bool enabled) {
@@ -152,25 +193,10 @@ class DictionaryViewModel extends ChangeNotifier {
     _notify();
   }
 
-  void setSort(SortMode mode) {
-    currentSort = mode;
-    int cmpAlpha(WordEntity a, WordEntity b) {
-      final na = _normalizeEng(a.source);
-      final nb = _normalizeEng(b.source);
-      return na.compareTo(nb);
-    }
-
-    switch (mode) {
-      case SortMode.alphaAsc:
-        words.sort(cmpAlpha);
-        break;
-      case SortMode.alphaDesc:
-        words.sort((a, b) => -cmpAlpha(a, b));
-        break;
-      case SortMode.dateAdded:
-        words.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        break;
-    }
+  /// Changes how the grid is sorted; null returns to the manual order.
+  /// The manual order itself is not touched.
+  void setSort(SortMode? mode) {
+    sortMode = mode;
     _applyFilter();
     _notify();
   }
@@ -181,18 +207,39 @@ class DictionaryViewModel extends ChangeNotifier {
     _notify();
   }
 
+  /// Rebuilds [filtered]. Runs after every change, so added, edited and
+  /// restored words always appear where the current sort puts them.
   void _applyFilter() {
-    if (query.isEmpty) {
-      filtered = List.from(words);
-    } else {
-      filtered = words
-          .where(
-            (w) =>
-                w.source.toLowerCase().contains(query) ||
-                w.target.toLowerCase().contains(query),
-          )
-          .toList();
-    }
+    final matching = query.isEmpty
+        ? List.of(words)
+        : words
+              .where(
+                (w) =>
+                    w.source.toLowerCase().contains(query) ||
+                    w.target.toLowerCase().contains(query),
+              )
+              .toList();
+    final mode = sortMode;
+    filtered = mode == null ? matching : _sorted(matching, mode);
+  }
+
+  /// Stable sort: equal keys keep their manual order.
+  List<WordEntity> _sorted(List<WordEntity> list, SortMode mode) {
+    int compare(WordEntity a, WordEntity b) => switch (mode) {
+      SortMode.alphaAsc => _normalizeEng(
+        a.source,
+      ).compareTo(_normalizeEng(b.source)),
+      SortMode.alphaDesc => _normalizeEng(
+        b.source,
+      ).compareTo(_normalizeEng(a.source)),
+      SortMode.dateAdded => b.createdAt.compareTo(a.createdAt),
+    };
+    final indexed = [for (var i = 0; i < list.length; i++) (i, list[i])];
+    indexed.sort((x, y) {
+      final c = compare(x.$2, y.$2);
+      return c != 0 ? c : x.$1.compareTo(y.$1);
+    });
+    return [for (final e in indexed) e.$2];
   }
 
   String _normalizeEng(String s) {
@@ -387,12 +434,14 @@ class DictionaryViewModel extends ChangeNotifier {
     if (index < 0) return;
     final removed = words.removeAt(index);
     final wasSelected = selected.remove(id);
+    _deletedAt[id] = (index: index, seq: ++_deleteSeq);
     _applyFilter();
     _notify();
     try {
       await _removeWord(id);
     } on StorageException {
       // Still stored: show it again where it was.
+      _deletedAt.remove(id);
       words.insert(index.clamp(0, words.length), removed);
       if (wasSelected) selected.add(id);
       _applyFilter();
@@ -401,26 +450,34 @@ class DictionaryViewModel extends ChangeNotifier {
     }
   }
 
-  /// Puts a deleted word back with all of its fields (Undo).
+  /// Puts a deleted word back with all of its fields (Undo), at its old
+  /// place in the manual order. Words never deleted here go to the end.
   Future<void> restoreWord(WordEntity w) async {
     if (wordById(w.id) != null) return;
-    words.add(w);
+    final position = _deletedAt.remove(w.id);
+    final index = (position?.index ?? words.length).clamp(0, words.length);
+    words.insert(index, w);
     _applyFilter();
     _notify();
     try {
-      await _restoreWord(w);
+      await _restoreWord(w, index: index);
     } on WordAlreadyExistsException {
       // Already stored (e.g. the delete never reached storage); nothing to do.
     } on StorageException {
       words.removeWhere((e) => identical(e, w));
+      if (position != null) _deletedAt[w.id] = position;
       _applyFilter();
       _notify();
       rethrow;
     }
   }
 
+  /// Undo for several deleted words. Restoring the last deleted first
+  /// rebuilds the exact previous order.
   Future<void> restoreWords(List<WordEntity> list) async {
-    for (final w in list) {
+    int seq(WordEntity w) => _deletedAt[w.id]?.seq ?? 0;
+    final ordered = List.of(list)..sort((a, b) => seq(b).compareTo(seq(a)));
+    for (final w in ordered) {
       await restoreWord(w);
     }
   }

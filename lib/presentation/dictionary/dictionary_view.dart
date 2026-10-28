@@ -39,9 +39,6 @@ class _DictionaryViewState extends State<DictionaryView> {
   Timer? _debounce;
   bool _loaded = false;
 
-  /// Sort chosen by the user; null while the grid is in manual order.
-  SortMode? _sort;
-
   @override
   void initState() {
     super.initState();
@@ -185,9 +182,14 @@ class _DictionaryViewState extends State<DictionaryView> {
     );
   }
 
-  void _setSort(SortMode? mode) {
-    setState(() => _sort = mode);
-    if (mode != null) vm.setSort(mode);
+  /// Long-press on a card when dragging is not possible: say why instead of
+  /// silently doing nothing.
+  void _explainReorderBlocked() {
+    final reason = vm.reorderBlockedReason;
+    if (reason == null) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(reason)));
   }
 
   // ---------------------------------------------------------------------------
@@ -319,7 +321,7 @@ class _DictionaryViewState extends State<DictionaryView> {
               onPressed: _search.clear,
               icon: const Icon(Icons.close_rounded),
             ),
-          if (!wide) _SortMenu(value: _sort, onChanged: _setSort),
+          if (!wide) _SortMenu(value: vm.sortMode, onChanged: vm.setSort),
           if (!wide) _selectButton(),
         ],
       ),
@@ -357,8 +359,8 @@ class _DictionaryViewState extends State<DictionaryView> {
               tooltip: 'Newest first',
             ),
           ],
-          selected: {?_sort},
-          onSelectionChanged: (s) => _setSort(s.isEmpty ? null : s.first),
+          selected: {?vm.sortMode},
+          onSelectionChanged: (s) => vm.setSort(s.isEmpty ? null : s.first),
         ),
         const SizedBox(width: AppSpacing.sm),
         _selectButton(),
@@ -443,10 +445,14 @@ class _DictionaryViewState extends State<DictionaryView> {
         return ReorderableGridView.builder(
           padding: EdgeInsets.fromLTRB(pad, AppSpacing.xs, pad, 120),
           itemCount: vm.filtered.length,
-          dragEnabled: !vm.selectionMode,
+          // Only the full list in manual order can be reordered; see
+          // DictionaryViewModel.canReorder.
+          dragEnabled: vm.canReorder,
           onReorder: (oldIndex, newIndex) {
-            setState(() => _sort = null);
-            vm.reorder(oldIndex, newIndex);
+            _guard(
+              ScaffoldMessenger.of(context),
+              () => vm.reorder(oldIndex, newIndex),
+            );
           },
           dragWidgetBuilderV2: DragWidgetBuilderV2(
             builder: (index, child, _) => Material(
@@ -500,6 +506,9 @@ class _DictionaryViewState extends State<DictionaryView> {
                   selectionMode: vm.selectionMode,
                   selected: vm.selected.contains(word.id),
                   onTap: () => _openDetails(word),
+                  onLongPress: vm.canReorder || vm.selectionMode
+                      ? null
+                      : _explainReorderBlocked,
                   onToggleSelect: () => vm.toggleSelect(word.id),
                   onExplain: () => _openDetails(word),
                   onEdit: () => _editWord(word.id),

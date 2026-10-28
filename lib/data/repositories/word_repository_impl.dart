@@ -31,12 +31,30 @@ class WordRepositoryImpl implements WordRepository {
   });
 
   @override
-  Future<void> create(WordEntity word) => _serialized(() async {
+  Future<void> create(WordEntity word, {int? index}) => _serialized(() async {
     final records = await _loadNormalized();
     if (records.any((r) => r.id == word.id)) {
       throw WordAlreadyExistsException(word.id);
     }
-    await storage.saveWords([...records, _toRecord(word)]);
+    records.insert(
+      (index ?? records.length).clamp(0, records.length),
+      _toRecord(word),
+    );
+    await storage.saveWords(records);
+  });
+
+  @override
+  Future<void> reorder(List<String> orderedIds) => _serialized(() async {
+    final records = await _loadNormalized();
+    final byId = {for (final r in records) r.id: r};
+    final listed = <String>{};
+    final reordered = [
+      for (final id in orderedIds)
+        if (byId.containsKey(id) && listed.add(id)) byId[id]!,
+      for (final r in records)
+        if (!listed.contains(r.id)) r,
+    ];
+    await storage.saveWords(reordered);
   });
 
   @override

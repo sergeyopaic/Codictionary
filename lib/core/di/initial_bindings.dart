@@ -5,6 +5,7 @@ import 'package:codictionary/domain/usecases/add_word.dart';
 import 'package:codictionary/domain/usecases/get_all_words.dart';
 import 'package:codictionary/domain/usecases/recover_words.dart';
 import 'package:codictionary/domain/usecases/remove_word.dart';
+import 'package:codictionary/domain/usecases/reorder_words.dart';
 import 'package:codictionary/domain/usecases/restore_word.dart';
 import 'package:codictionary/domain/usecases/update_word.dart';
 import 'package:codictionary/services/storage/storage_interface.dart' as legacy;
@@ -37,6 +38,9 @@ void registerInitialDependenciesSync() {
   }
   if (!sl.isRegistered<RecoverWords>()) {
     sl.registerFactory<RecoverWords>(() => RecoverWords(sl()));
+  }
+  if (!sl.isRegistered<ReorderWords>()) {
+    sl.registerFactory<ReorderWords>(() => ReorderWords(sl()));
   }
   if (!sl.isRegistered<RestoreWord>()) {
     sl.registerFactory<RestoreWord>(() => RestoreWord(sl()));

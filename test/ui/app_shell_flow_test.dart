@@ -122,4 +122,25 @@ void main() {
     expect(find.text('serendipity'), findsOneWidget);
     expect(find.text('Your dictionary is empty'), findsNothing);
   });
+
+  testWidgets('long-press while searching explains why dragging is off', (
+    tester,
+  ) async {
+    await _pumpApp(tester, const Size(1400, 900));
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(SearchBar),
+        matching: find.byType(EditableText),
+      ),
+      'app',
+    );
+    await tester.pump(const Duration(milliseconds: 300)); // search debounce
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('apple'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Clear the search to reorder words.'), findsOneWidget);
+  });
 }
