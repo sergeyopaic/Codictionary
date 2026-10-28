@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
 import '../../domain/entities/word_entity.dart';
+import '../../domain/exceptions/storage_exceptions.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
 import '../dialogs/confirm_delete_dialog.dart';
 import '../theme/app_tokens.dart';
@@ -15,6 +16,7 @@ import '../widgets/theme_toggle_button.dart';
 import 'dictionary_view_model.dart';
 import 'widgets/dictionary_hero.dart';
 import 'widgets/selection_bar.dart';
+import 'widgets/storage_error_view.dart';
 import 'widgets/word_card.dart';
 import 'widgets/word_details_sheet.dart';
 import 'widgets/word_editor_dialog.dart';
@@ -93,16 +95,42 @@ class _DictionaryViewState extends State<DictionaryView> {
     final messenger = ScaffoldMessenger.of(context);
     final ok = await showConfirmDeleteDialog(context, word.source);
     if (!ok) return;
-    await vm.deleteById(word.id);
+    try {
+      await vm.deleteById(word.id);
+    } on StorageException catch (e) {
+      _showStorageError(messenger, e);
+      return;
+    }
     messenger.showSnackBar(
       SnackBar(
         content: Text('"${word.source}" deleted.'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => vm.restoreWord(word),
+          onPressed: () => _guard(messenger, () => vm.restoreWord(word)),
         ),
       ),
     );
+  }
+
+  /// Reports a failed save. The data on disk is unchanged in that case.
+  void _showStorageError(ScaffoldMessengerState messenger, StorageException e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Not saved: ${e.message}'),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  Future<void> _guard(
+    ScaffoldMessengerState messenger,
+    Future<void> Function() op,
+  ) async {
+    try {
+      await op();
+    } on StorageException catch (e) {
+      _showStorageError(messenger, e);
+    }
   }
 
   Future<void> _deleteSelected() async {
@@ -113,18 +141,31 @@ class _DictionaryViewState extends State<DictionaryView> {
     final removed = vm.words
         .where((w) => vm.selected.contains(w.id))
         .toList(growable: false);
-    await vm.deleteSelected();
+    StorageException? failure;
+    try {
+      await vm.deleteSelected();
+    } on StorageException catch (e) {
+      failure = e;
+    }
+    // Only offer Undo for words that really were deleted.
+    final deleted = removed
+        .where((w) => vm.wordById(w.id) == null)
+        .toList(growable: false);
+    if (failure != null) {
+      _showStorageError(messenger, failure);
+      if (deleted.isEmpty) return;
+    }
     vm.toggleSelectionMode(false);
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          removed.length == 1
+          deleted.length == 1
               ? '1 word deleted.'
-              : '${removed.length} words deleted.',
+              : '${deleted.length} words deleted.',
         ),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () => vm.restoreWords(removed),
+          onPressed: () => _guard(messenger, () => vm.restoreWords(deleted)),
         ),
       ),
     );
@@ -244,12 +285,12 @@ class _DictionaryViewState extends State<DictionaryView> {
         ),
       ),
       floatingActionButton: AnimatedScale(
-        scale: vm.selectionMode ? 0 : 1,
+        scale: vm.selectionMode || vm.loadError != null ? 0 : 1,
         duration: AppMotion.medium,
         curve: AppMotion.emphasized,
         child: FloatingActionButton.extended(
           tooltip: 'Add word (Ctrl+N)',
-          onPressed: vm.selectionMode ? null : _addWord,
+          onPressed: vm.selectionMode || vm.loadError != null ? null : _addWord,
           icon: const Icon(Icons.add_rounded),
           label: const Text('Add word'),
         ),
@@ -335,6 +376,14 @@ class _DictionaryViewState extends State<DictionaryView> {
   Widget _buildContent(BuildContext context, double pad) {
     if (!_loaded) {
       return const Center(child: CircularProgressIndicator());
+    }
+    final loadError = vm.loadError;
+    if (loadError != null) {
+      return StorageErrorView(
+        error: loadError,
+        onRetry: vm.load,
+        onRecover: vm.recover,
+      );
     }
     if (vm.words.isEmpty) {
       return EmptyState(

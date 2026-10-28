@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../theme/app_tokens.dart';
 import '../dictionary_view_model.dart';
 
@@ -92,7 +93,7 @@ class _WordDetailsState extends State<WordDetails> {
     try {
       await widget.vm.regenerateShortExplanation(widget.wordId);
     } catch (e) {
-      _errorShort = '$e';
+      _errorShort = _describe(e);
     }
     if (mounted) setState(() => _loadingShort = false);
   }
@@ -105,10 +106,14 @@ class _WordDetailsState extends State<WordDetails> {
     try {
       await widget.vm.generateLongExplanation(widget.wordId);
     } catch (e) {
-      _errorLong = '$e';
+      _errorLong = _describe(e);
     }
     if (mounted) setState(() => _loadingLong = false);
   }
+
+  static String _describe(Object e) => e is StorageException
+      ? 'The explanation was generated but could not be saved.\n${e.message}'
+      : 'Cody couldn\'t reach the AI service.\n$e';
 
   void _close(VoidCallback then) {
     Navigator.of(context).pop();
@@ -275,7 +280,7 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
     } else if (widget.error != null) {
       body = _Message(
         icon: Icons.cloud_off_rounded,
-        text: 'Cody couldn\'t reach the AI service.\n${widget.error}',
+        text: widget.error!,
         action: FilledButton.tonalIcon(
           onPressed: widget.onGenerate,
           icon: const Icon(Icons.refresh_rounded),

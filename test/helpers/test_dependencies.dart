@@ -5,6 +5,7 @@ import 'package:codictionary/data/repositories/word_repository_impl.dart';
 import 'package:codictionary/domain/repositories/word_repository.dart';
 import 'package:codictionary/domain/usecases/add_word.dart';
 import 'package:codictionary/domain/usecases/get_all_words.dart';
+import 'package:codictionary/domain/usecases/recover_words.dart';
 import 'package:codictionary/domain/usecases/remove_word.dart';
 import 'package:codictionary/domain/usecases/restore_word.dart';
 import 'package:codictionary/domain/usecases/update_word.dart';
@@ -26,6 +27,7 @@ Future<void> registerTestDependencies({
     ..registerFactory<AddWord>(() => AddWord(sl()))
     ..registerFactory<UpdateWord>(() => UpdateWord(sl()))
     ..registerFactory<RestoreWord>(() => RestoreWord(sl()))
+    ..registerFactory<RecoverWords>(() => RecoverWords(sl()))
     ..registerFactory<RemoveWord>(() => RemoveWord(sl()))
     ..registerLazySingleton<GptService>(() => gpt)
     ..registerLazySingleton<TranslateService>(

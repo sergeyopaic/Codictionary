@@ -1,75 +1,70 @@
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
-// ignore: undefined_identifier
-import 'dart:convert';
 
-import '../../models/word.dart';
+import '../../domain/exceptions/storage_exceptions.dart';
+import 'safe_json_storage.dart';
+import 'storage_backend.dart';
 import 'storage_interface.dart';
 
-class WebStorageService implements StorageService {
-  static const _key = 'codictionary_dictionary';
-  static const _vocabsKey = 'codictionary_vocabularies';
-
-  @override
-  Future<List<Word>> loadWords() async {
+/// Stores each key in the browser's localStorage.
+class LocalStorageBackend implements StorageBackend {
+  html.Storage get _storage {
     try {
-      final raw = html.window.localStorage[_key];
-      if (raw == null || raw.trim().isEmpty) return [];
-      final decoded = (jsonDecode(raw) as List);
-      final list = decoded.cast<Map<String, dynamic>>();
-      final needsSave = decoded.any(
-        (e) =>
-            e is Map &&
-            (e['addedAt'] == null ||
-                (e['addedAt'] as String?)?.isEmpty == true),
+      return html.window.localStorage;
+    } catch (e) {
+      // Blocked site data or some private modes throw on access.
+      throw StorageUnavailableException(
+        'Browser storage is disabled for this site.',
+        cause: e,
       );
-      final words = list.map(Word.fromMap).toList();
-      if (needsSave) {
-        // Persist backfilled timestamps
-        await saveWords(words);
-      }
-      return words;
-    } catch (_) {
-      return [];
     }
   }
 
   @override
-  Future<void> saveWords(List<Word> words) async {
+  String describe(String key) => 'browser storage ($key)';
+
+  @override
+  Future<String?> read(String key) async {
+    final storage = _storage;
     try {
-      final jsonList = words.map((w) => w.toMap()).toList();
-      html.window.localStorage[_key] = jsonEncode(jsonList);
-    } catch (_) {
-      // Ignore to avoid breaking UX.
+      return storage[key];
+    } catch (e) {
+      throw StorageUnavailableException(
+        'Could not read browser storage.',
+        cause: e,
+      );
     }
   }
 
   @override
-  Future<List<Map<String, String>>> loadVocabularies() async {
+  Future<void> write(String key, String value) async {
+    final html.Storage storage;
     try {
-      final raw = html.window.localStorage[_vocabsKey];
-      if (raw == null || raw.trim().isEmpty) return [];
-      final decoded = (jsonDecode(raw) as List).cast<Map>();
-      return decoded
-          .map(
-            (e) => {
-              'name': (e['name'] ?? '').toString(),
-              'description': (e['description'] ?? '').toString(),
-              'icon': (e['icon'] ?? '').toString(),
-            },
-          )
-          .toList();
-    } catch (_) {
-      return [];
+      storage = _storage;
+    } on StorageUnavailableException catch (e) {
+      throw StorageWriteException(e.message, cause: e.cause);
     }
-  }
-
-  @override
-  Future<void> saveVocabularies(List<Map<String, String>> vocabs) async {
     try {
-      html.window.localStorage[_vocabsKey] = jsonEncode(vocabs);
-    } catch (_) {}
+      // setItem either stores the whole value or throws, leaving the old one.
+      storage[key] = value;
+    } catch (e) {
+      final quota =
+          e is html.DomException &&
+          (e.name == 'QuotaExceededError' ||
+              e.name == 'NS_ERROR_DOM_QUOTA_REACHED');
+      throw StorageWriteException(
+        quota
+            ? 'Browser storage is full. Free some space and try again.'
+            : 'Could not save to browser storage.',
+        quotaExceeded: quota,
+        cause: e,
+      );
+    }
   }
 }
 
-StorageService createStorageService() => WebStorageService();
+StorageService createStorageService() => SafeJsonStorage(
+  LocalStorageBackend(),
+  wordsKey: 'codictionary_dictionary',
+  vocabsKey: 'codictionary_vocabularies',
+);

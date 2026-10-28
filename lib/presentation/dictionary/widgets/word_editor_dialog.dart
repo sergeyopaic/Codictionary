@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../theme/app_tokens.dart';
 import '../dictionary_view_model.dart';
 
@@ -50,6 +51,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
   bool _saving = false;
   bool _rusTouched = false;
   String? _engError;
+  String? _saveError;
 
   bool get _isEdit => widget.wordId != null;
 
@@ -101,15 +103,30 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
       setState(() => _engError = 'Enter a word first');
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
     if (_autoTranslate && rus.isEmpty) {
       try {
         rus = await widget.vm.translateToRu(eng);
       } catch (_) {}
     }
-    final ok = _isEdit
-        ? await widget.vm.editWord(widget.wordId!, eng: eng, rus: rus)
-        : await widget.vm.addWord(eng: eng, rus: rus);
+    final bool ok;
+    try {
+      ok = _isEdit
+          ? await widget.vm.editWord(widget.wordId!, eng: eng, rus: rus)
+          : await widget.vm.addWord(eng: eng, rus: rus);
+    } on StorageException catch (e) {
+      // Keep the dialog and the typed text so the user can retry.
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError = 'Not saved: ${e.message}';
+        });
+      }
+      return;
+    }
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).pop(true);
@@ -232,6 +249,15 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                   ),
                 ),
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.lg),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
 import 'package:codictionary/models/word.dart';
 import 'package:codictionary/services/storage/storage_interface.dart';
 
@@ -22,6 +23,10 @@ class JsonStorageService implements StorageService {
   @override
   Future<void> saveWords(List<Word> words) async =>
       wordsJson = jsonEncode(words.map((w) => w.toMap()).toList());
+
+  @override
+  Future<void> recoverWords(StorageRecovery action) async =>
+      throw UnsupportedError('JsonStorageService never reports damage');
 
   @override
   Future<List<Map<String, String>>> loadVocabularies() async =>

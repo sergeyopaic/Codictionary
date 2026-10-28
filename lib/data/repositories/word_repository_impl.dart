@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/word_entity.dart';
+import '../../domain/exceptions/storage_exceptions.dart';
 import '../../domain/exceptions/word_exceptions.dart';
 import '../../domain/repositories/word_repository.dart';
 import '../../services/storage/storage_interface.dart' as legacy;
@@ -56,6 +57,10 @@ class WordRepositoryImpl implements WordRepository {
     await storage.saveWords(remaining);
   });
 
+  @override
+  Future<void> recover(StorageRecovery action) =>
+      _serialized(() => storage.recoverWords(action));
+
   /// Loads stored records and repairs empty or duplicate ids. Without this,
   /// an empty id gets a new random id on every load and duplicates make
   /// updates and removals hit the wrong entry. Repairs are persisted once.
@@ -78,7 +83,13 @@ class WordRepositoryImpl implements WordRepository {
       }
       seen.add(records[i].id);
     }
-    if (changed) await storage.saveWords(records);
+    if (changed) {
+      try {
+        await storage.saveWords(records);
+      } on StorageWriteException {
+        // Reading still works; the next successful write stores the ids.
+      }
+    }
     return records;
   }
 

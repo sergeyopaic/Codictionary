@@ -7,9 +7,17 @@ import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/services/gpt_service.dart';
 import 'package:codictionary/services/translate_service.dart';
 
-import '../fakes/json_storage_service.dart';
+import 'package:codictionary/services/storage/safe_json_storage.dart';
+import 'package:codictionary/services/storage/storage_interface.dart';
 
-Future<void> _pumpApp(WidgetTester tester, Size size) async {
+import '../fakes/json_storage_service.dart';
+import '../fakes/memory_backend.dart';
+
+Future<void> _pumpApp(
+  WidgetTester tester,
+  Size size, {
+  StorageService? storage,
+}) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -17,7 +25,7 @@ Future<void> _pumpApp(WidgetTester tester, Size size) async {
     MyApp(
       gpt: GptService(''),
       translate: TranslateService(''),
-      storage: JsonStorageService(),
+      storage: storage ?? JsonStorageService(),
       defaultWords: [
         WordEntity(
           id: '1',
@@ -59,5 +67,40 @@ void main() {
     await tester.tap(find.text('Vocabularies'));
     await tester.pumpAndSettle();
     expect(find.text('No vocabularies yet'), findsOneWidget);
+  });
+
+  testWidgets('damaged dictionary offers recovery instead of demo words', (
+    tester,
+  ) async {
+    final good =
+        '[{"id":"9","eng":"pear","rus":"груша",'
+        '"addedAt":"2025-01-01T00:00:00.000Z"}]';
+    final backend = MemoryBackend({
+      'dictionary.json': 'garbage',
+      'dictionary.json.bak': good,
+    });
+    await _pumpApp(
+      tester,
+      const Size(1400, 900),
+      storage: SafeJsonStorage(
+        backend,
+        wordsKey: 'dictionary.json',
+        vocabsKey: 'vocabularies.json',
+      ),
+    );
+
+    expect(find.text('Your dictionary file is damaged'), findsOneWidget);
+    expect(find.text('apple'), findsNothing, reason: 'no demo words');
+    // The add button is hidden and disabled while storage is damaged.
+    final fab = tester.widget<FloatingActionButton>(
+      find.byType(FloatingActionButton),
+    );
+    expect(fab.onPressed, isNull);
+
+    await tester.tap(find.text('Restore last good copy'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('pear'), findsOneWidget);
+    expect(find.text('Your dictionary file is damaged'), findsNothing);
   });
 }

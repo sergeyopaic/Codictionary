@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/di/service_locator.dart';
+import '../../domain/exceptions/storage_exceptions.dart';
 import '../../services/storage_service.dart';
 import '../dialogs/confirm_dialog.dart';
 import '../theme/app_tokens.dart';
@@ -20,6 +21,10 @@ class _VocabsViewState extends State<VocabsView> {
   late final StorageService _storage;
   bool _loaded = false;
 
+  /// Set when stored vocabularies could not be read. Editing is disabled so
+  /// the stored data is not replaced by an empty list.
+  StorageException? _loadError;
+
   @override
   void initState() {
     super.initState();
@@ -28,18 +33,36 @@ class _VocabsViewState extends State<VocabsView> {
   }
 
   Future<void> _load() async {
-    final raw = await _storage.loadVocabularies();
+    List<Map<String, String>> raw = const [];
+    StorageException? error;
+    try {
+      raw = await _storage.loadVocabularies();
+    } on StorageException catch (e) {
+      error = e;
+    }
     if (!mounted) return;
     setState(() {
       _vocabs
         ..clear()
         ..addAll(raw.map(_Vocab.fromMap));
+      _loadError = error;
       _loaded = true;
     });
   }
 
-  Future<void> _persist() =>
-      _storage.saveVocabularies(_vocabs.map((e) => e.toMap()).toList());
+  /// Saves the list. On failure shows why and reloads what is really stored,
+  /// so the screen never shows an unsaved change as saved.
+  Future<void> _persist() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _storage.saveVocabularies(_vocabs.map((e) => e.toMap()).toList());
+    } on StorageException catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Not saved: ${e.message}')),
+      );
+      await _load();
+    }
+  }
 
   Future<void> _create() async {
     final res = await showCreateVocabularyDialog(context);
@@ -110,7 +133,7 @@ class _VocabsViewState extends State<VocabsView> {
                         ? 'Organize words into themed collections'
                         : '${_vocabs.length} '
                               '${_vocabs.length == 1 ? 'collection' : 'collections'}',
-                    trailing: wide
+                    trailing: wide && _loadError == null
                         ? FilledButton.icon(
                             onPressed: _create,
                             icon: const Icon(Icons.add_rounded),
@@ -125,7 +148,7 @@ class _VocabsViewState extends State<VocabsView> {
           ),
         ),
       ),
-      floatingActionButton: wide
+      floatingActionButton: wide || _loadError != null
           ? null
           : FloatingActionButton.extended(
               icon: const Icon(Icons.add_rounded),
@@ -137,6 +160,19 @@ class _VocabsViewState extends State<VocabsView> {
 
   Widget _buildContent(double pad) {
     if (!_loaded) return const Center(child: CircularProgressIndicator());
+    final loadError = _loadError;
+    if (loadError != null) {
+      return EmptyState(
+        image: CodyArt.delete,
+        title: "Can't open your vocabularies",
+        message: '${loadError.message} Nothing was changed.',
+        action: FilledButton.icon(
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Try again'),
+        ),
+      );
+    }
     if (_vocabs.isEmpty) {
       return EmptyState(
         image: CodyArt.reading,

@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/di/service_locator.dart';
 import '../../domain/entities/word_entity.dart';
+import '../../domain/exceptions/storage_exceptions.dart';
 import '../../domain/exceptions/word_exceptions.dart';
 import '../../domain/usecases/add_word.dart';
 import '../../domain/usecases/get_all_words.dart';
+import '../../domain/usecases/recover_words.dart';
 import '../../domain/usecases/remove_word.dart';
 import '../../domain/usecases/restore_word.dart';
 import '../../domain/usecases/update_word.dart';
@@ -17,6 +19,7 @@ class DictionaryViewModel extends ChangeNotifier {
   final UpdateWord _updateWord;
   final RestoreWord _restoreWord;
   final RemoveWord _removeWord;
+  final RecoverWords _recoverWords;
   final GptService _gpt;
   final TranslateService _translate;
 
@@ -26,6 +29,7 @@ class DictionaryViewModel extends ChangeNotifier {
       _updateWord = sl(),
       _restoreWord = sl(),
       _removeWord = sl(),
+      _recoverWords = sl(),
       _gpt = sl(),
       _translate = sl();
 
@@ -36,6 +40,10 @@ class DictionaryViewModel extends ChangeNotifier {
   bool selectionMode = false;
   final Set<String> selected = {};
   SortMode currentSort = SortMode.alphaAsc;
+
+  /// Set when stored words could not be loaded. While set, the dictionary
+  /// is not usable and nothing is written, so damaged data stays as is.
+  StorageException? loadError;
 
   /// Normalized English words whose add is in flight (awaiting AI/storage).
   final Set<String> _pendingAdds = {};
@@ -69,18 +77,32 @@ class DictionaryViewModel extends ChangeNotifier {
   }
 
   Future<void> load({List<WordEntity> seed = const []}) async {
-    final list = await _getAll();
-    if (list.isEmpty && seed.isNotEmpty) {
-      // Seed defaults with their own ids and dates.
-      for (final w in seed) {
-        await _restoreWord(w);
+    try {
+      final list = await _getAll();
+      if (list.isEmpty && seed.isNotEmpty) {
+        // Seed defaults with their own ids and dates. Only reached when the
+        // data was read successfully, never after a read failure.
+        for (final w in seed) {
+          await _restoreWord(w);
+        }
+        words = List.of(seed);
+      } else {
+        words = List.of(list);
       }
-      words = List.of(seed);
-    } else {
-      words = List.of(list);
+      loadError = null;
+    } on StorageException catch (e) {
+      words = [];
+      loadError = e;
     }
     _applyFilter();
     _notify();
+  }
+
+  /// Applies a recovery action to damaged storage and reloads. Throws a
+  /// [StorageException] if recovery itself fails.
+  Future<void> recover(StorageRecovery action) async {
+    await _recoverWords(action);
+    await load();
   }
 
   void reorder(int oldIndex, int newIndex) {
@@ -123,6 +145,8 @@ class DictionaryViewModel extends ChangeNotifier {
     _notify();
   }
 
+  /// Deletes the selected words one by one. Stops at the first storage
+  /// failure and rethrows it; words not yet deleted stay selected.
   Future<void> deleteSelected() async {
     if (selected.isEmpty) return;
     // Copy to avoid mutation during iteration
@@ -248,11 +272,13 @@ class DictionaryViewModel extends ChangeNotifier {
   }
 
   /// Replaces the in-memory copy of [word] and persists it. A word that was
-  /// deleted (or is being deleted) is never brought back.
+  /// deleted (or is being deleted) is never brought back. If storage fails
+  /// the change is rolled back and the [StorageException] rethrown.
   Future<void> _save(WordEntity word) async {
     if (removing.contains(word.id)) return;
     final i = words.indexWhere((w) => w.id == word.id);
     if (i < 0) return;
+    final previous = words[i];
     words[i] = word;
     _applyFilter();
     _notify();
@@ -260,6 +286,13 @@ class DictionaryViewModel extends ChangeNotifier {
       await _updateWord(word);
     } on WordNotFoundException {
       // Deleted from storage meanwhile; the delete wins.
+    } on StorageException {
+      // Undo only our own change; a later change to the word stays.
+      final j = words.indexWhere((w) => identical(w, word));
+      if (j >= 0) words[j] = previous;
+      _applyFilter();
+      _notify();
+      rethrow;
     }
   }
 
@@ -333,11 +366,22 @@ class DictionaryViewModel extends ChangeNotifier {
     _notify();
     await Future.delayed(const Duration(milliseconds: 200));
     removing.remove(id);
-    words.removeWhere((w) => w.id == id);
-    selected.remove(id);
+    final index = words.indexWhere((w) => w.id == id);
+    if (index < 0) return;
+    final removed = words.removeAt(index);
+    final wasSelected = selected.remove(id);
     _applyFilter();
     _notify();
-    await _removeWord(id);
+    try {
+      await _removeWord(id);
+    } on StorageException {
+      // Still stored: show it again where it was.
+      words.insert(index.clamp(0, words.length), removed);
+      if (wasSelected) selected.add(id);
+      _applyFilter();
+      _notify();
+      rethrow;
+    }
   }
 
   /// Puts a deleted word back with all of its fields (Undo).
@@ -350,6 +394,11 @@ class DictionaryViewModel extends ChangeNotifier {
       await _restoreWord(w);
     } on WordAlreadyExistsException {
       // Already stored (e.g. the delete never reached storage); nothing to do.
+    } on StorageException {
+      words.removeWhere((e) => identical(e, w));
+      _applyFilter();
+      _notify();
+      rethrow;
     }
   }
 
