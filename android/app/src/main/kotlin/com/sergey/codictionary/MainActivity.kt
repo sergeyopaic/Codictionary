@@ -1,4 +1,4 @@
-package com.example.codictionary
+package com.sergey.codictionary
 
 import io.flutter.embedding.android.FlutterActivity
 

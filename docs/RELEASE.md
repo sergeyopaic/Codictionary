@@ -9,7 +9,7 @@ Last checked: 2026-10-29, on Windows 11 with Flutter 3.35.4.
 
 | Platform | Network permission | Release build | Request scenario in release | Status |
 |---|---|---|---|---|
-| Android | `INTERNET` in `src/main/AndroidManifest.xml` | ✅ `flutter build apk --release`; `aapt dump permissions` lists `android.permission.INTERNET` | ❌ not run (no device or emulator available) | **Not verified on a device** |
+| Android | `INTERNET` in `src/main/AndroidManifest.xml` | ✅ `flutter build apk --release`; `aapt` shows package `com.sergey.codictionary` and `android.permission.INTERNET` | ❌ not run (no device or emulator available) | **Not verified on a device** |
 | Web | not applicable | ✅ `flutter build web --release` | ✅ ran in a browser: OpenAI was reached (answered 429 `insufficient_quota`, shown as "out of credit"); DeepL is **blocked by CORS** | **Works, except translation** |
 | Windows | not needed (desktop app, no sandbox) | ✅ `flutter build windows --release` | ❌ not run (it would write to the real `Documents\dictionary.json`) | **Build verified only** |
 | Windows MSIX | `msix_config` capabilities not reviewed | ❌ not built | ❌ | **Not verified** |
@@ -65,12 +65,20 @@ apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk
 
 The certificate must not be `CN=Android Debug`.
 
+### Application id
+
+The app id is `com.sergey.codictionary` on every platform (Android
+`applicationId` and `namespace`, iOS and macOS bundle id, Linux
+`APPLICATION_ID`, Windows MSIX identity). It cannot change after the first
+store release.
+
+Builds installed earlier under `com.example.codictionary` are a different app
+to Android and macOS: they keep their own data, and the new build starts with
+an empty dictionary there. Windows is not affected (data lives in
+`Documents`).
+
 ### Before the first public release
 
-- **Decide the final `applicationId`.** It is still `com.example.codictionary`
-  (Android, iOS and macOS bundle ids alike). Stores reject `com.example`, and
-  the id cannot change after publishing. The Windows MSIX identity is already
-  `com.sergey.codictionary`.
 - Set the app label: `android:label` is `codictionary` (lower case).
 
 ## Release checklist
