@@ -60,6 +60,7 @@ class VocabularyWordsView extends StatelessWidget {
     } on StorageException {
       return;
     }
+    messenger.hideCurrentSnackBar(); // Undo must not wait in the queue
     messenger.showSnackBar(
       SnackBar(
         content: Text(s.removedFromVocab(word.source)),

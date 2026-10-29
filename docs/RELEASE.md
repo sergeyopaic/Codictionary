@@ -83,9 +83,11 @@ an empty dictionary there. Windows is not affected (data lives in
 
 ## Release checklist
 
-- [ ] `flutter analyze --no-pub`, `dart format --output=none --set-exit-if-changed lib test`, `flutter test --no-pub` pass.
-- [ ] No real keys in the build (see "API keys inside the app").
+- [ ] CI is green on the release commit (format, analyzer, tests, web build,
+      secrets check). See `TEST_MATRIX.md` for what it covers.
+- [ ] No real keys in the build: `dart tools/check_no_secrets.dart build/web`
+      (or the build folder of the platform you ship) passes.
+- [ ] Run **API smoke (manual)** in GitHub Actions; both services pass.
 - [ ] Android: signed with the release key (`apksigner verify`), not the debug key.
-- [ ] On each platform you ship: install the **release** build, add a word, and
-      check that translation and the explanation work or show a clear error.
+- [ ] On each platform you ship: the manual checks in `TEST_MATRIX.md`.
 - [ ] Update the matrix above with what was actually checked and when.

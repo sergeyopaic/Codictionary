@@ -121,6 +121,8 @@ class _DictionaryViewState extends State<DictionaryView> {
       _showStorageError(messenger, e);
       return;
     }
+    // Undo must be reachable at once, not queued behind an older message.
+    messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(s.wordDeleted(word.source)),
@@ -180,6 +182,8 @@ class _DictionaryViewState extends State<DictionaryView> {
       if (deleted.isEmpty) return;
     }
     vm.toggleSelectionMode(false);
+    // Undo must be reachable at once; keep a save error visible, though.
+    if (failure == null) messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(s.wordsDeleted(deleted.length)),

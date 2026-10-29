@@ -1,0 +1,31 @@
+# Calls the paid OpenAI and DeepL APIs once each with the repository secrets
+# OPENAI_API_KEY and DEEPL_API_KEY. Manual only: it costs money and depends
+# on account balance, so it never runs on pushes or pull requests.
+name: API smoke (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.4
+          cache: true
+      - name: Flutter pub get
+        run: flutter pub get
+      - name: Create .env without keys
+        run: printf 'OPENAI_API_KEY=\nDEEPL_API_KEY=\n' > .env
+      - name: Smoke test
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPL_API_KEY: ${{ secrets.DEEPL_API_KEY }}
+        run: flutter test --no-pub --reporter expanded smoke

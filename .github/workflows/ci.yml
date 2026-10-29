@@ -5,24 +5,39 @@ on:
   push:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.35.4
+          cache: true
       - name: Flutter pub get
         run: flutter pub get
+      # .env is a bundled asset, so it must exist. Empty keys = local mode:
+      # CI never sees or ships real API keys.
+      - name: Create .env without keys
+        run: printf 'OPENAI_API_KEY=\nDEEPL_API_KEY=\n' > .env
+      - name: No secrets in the repository
+        run: dart tools/check_no_secrets.dart --tracked
       - name: Format check
-        run: |
-          dart format --output=none --set-exit-if-changed .
-      - name: Create stub .env
-        run: touch .env
+        run: dart format --output=none --set-exit-if-changed .
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-pub
       - name: Test
         run: flutter test --no-pub --reporter expanded
-
+      - name: Build web (release)
+        run: flutter build web --release --no-pub
+      - name: No secrets in the web build
+        run: dart tools/check_no_secrets.dart build/web

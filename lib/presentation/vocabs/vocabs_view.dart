@@ -111,6 +111,7 @@ class _VocabsViewState extends State<VocabsView> {
     }
     if (deleted == null) return;
     final undo = deleted;
+    messenger.hideCurrentSnackBar(); // Undo must not wait in the queue
     messenger.showSnackBar(
       SnackBar(
         content: Text(s.vocabDeleted(v.name)),
