@@ -67,4 +67,5 @@ StorageService createStorageService() => SafeJsonStorage(
   LocalStorageBackend(),
   wordsKey: 'codictionary_dictionary',
   vocabsKey: 'codictionary_vocabularies',
+  settingsKey: 'codictionary_settings',
 );

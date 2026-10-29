@@ -113,40 +113,50 @@ class _Sidebar extends StatelessWidget {
             AppSpacing.lg,
             AppSpacing.lg,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-                child: BrandMark(size: 40),
+          // Scrolls only when it does not fit (short window, large text);
+          // otherwise the tip and theme selector sit at the bottom.
+          child: CustomScrollView(
+            slivers: [
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                      child: BrandMark(size: 40),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        AppSpacing.sm,
+                      ),
+                      child: Text(
+                        'LIBRARY',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                    for (var i = 0; i < _destinations.length; i++)
+                      _NavItem(
+                        destination: _destinations[i],
+                        selected: i == index,
+                        onTap: () => onSelected(i),
+                      ),
+                    const Spacer(),
+                    const SizedBox(height: AppSpacing.lg),
+                    const _TipCard(),
+                    const SizedBox(height: AppSpacing.md),
+                    const _ThemeSelector(),
+                  ],
+                ),
               ),
-              const SizedBox(height: AppSpacing.xxl),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  0,
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                ),
-                child: Text(
-                  'LIBRARY',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-              for (var i = 0; i < _destinations.length; i++)
-                _NavItem(
-                  destination: _destinations[i],
-                  selected: i == index,
-                  onTap: () => onSelected(i),
-                ),
-              const Spacer(),
-              const _TipCard(),
-              const SizedBox(height: AppSpacing.md),
-              const _ThemeSelector(),
             ],
           ),
         ),
@@ -192,11 +202,15 @@ class _NavItem extends StatelessWidget {
                   size: 22,
                 ),
                 const SizedBox(width: AppSpacing.md),
-                Text(
-                  destination.label,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: fg,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                Expanded(
+                  child: Text(
+                    destination.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: fg,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -258,7 +272,7 @@ class _ThemeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = ThemeController.instance;
+    final controller = ThemeScope.of(context);
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: controller,
       builder: (context, mode, _) => SegmentedButton<ThemeMode>(

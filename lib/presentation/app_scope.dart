@@ -10,6 +10,7 @@ import '../domain/usecases/recover_words.dart';
 import '../domain/usecases/remove_word.dart';
 import '../domain/usecases/reorder_words.dart';
 import '../domain/usecases/restore_word.dart';
+import '../domain/usecases/settings.dart';
 import '../domain/usecases/translate_word.dart';
 import '../domain/usecases/update_word.dart';
 
@@ -37,6 +38,8 @@ class AppUseCases {
     required this.replaceDictionary,
     required this.saveBackupFile,
     required this.backupFiles,
+    required this.loadSettings,
+    required this.saveSettings,
   });
 
   final GetAllWords getAllWords;
@@ -59,6 +62,8 @@ class AppUseCases {
   final ReplaceDictionary replaceDictionary;
   final SaveBackupFile saveBackupFile;
   final BackupFileAccess backupFiles;
+  final LoadSettings loadSettings;
+  final SaveSettings saveSettings;
 }
 
 /// Provides [AppUseCases] to the widget tree. Immutable: rebuilding the app

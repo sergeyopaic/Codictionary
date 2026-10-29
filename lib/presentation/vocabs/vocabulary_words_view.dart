@@ -190,6 +190,9 @@ class VocabularyWordsView extends StatelessWidget {
           floatingActionButton: words.isEmpty
               ? null
               : FloatingActionButton.extended(
+                  // Tabs stay alive in an IndexedStack, so several FABs coexist;
+                  // without distinct tags opening a page crashes the hero animation.
+                  heroTag: null,
                   onPressed: () => _addWords(context, v),
                   icon: const Icon(Icons.playlist_add_rounded),
                   label: const Text('Add words'),

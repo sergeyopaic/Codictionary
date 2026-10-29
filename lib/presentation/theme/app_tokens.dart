@@ -36,6 +36,12 @@ abstract final class AppBreakpoints {
 
   static bool isWide(BuildContext context) =>
       MediaQuery.sizeOf(context).width >= wide;
+
+  /// How much larger than normal the user's text is (1 = default). Fixed
+  /// height cards multiply their height by this so large text never
+  /// overflows.
+  static double textScale(BuildContext context) =>
+      (MediaQuery.textScalerOf(context).scale(16) / 16).clamp(1.0, 3.0);
 }
 
 /// Asset paths for the Cody mascot illustrations.

@@ -88,10 +88,13 @@ void main() {
     expect(find.text('Your dictionary file is damaged'), findsOneWidget);
     expect(find.text('apple'), findsNothing, reason: 'no demo words');
     // The add button is hidden and disabled while storage is damaged.
-    final fab = tester.widget<FloatingActionButton>(
-      find.byType(FloatingActionButton),
+    final add = tester.widget<ButtonStyleButton>(
+      find.ancestor(
+        of: find.text('Add word'),
+        matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+      ),
     );
-    expect(fab.onPressed, isNull);
+    expect(add.onPressed, isNull);
 
     await tester.tap(find.text('Restore last good copy'));
     await tester.pumpAndSettle();

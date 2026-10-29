@@ -34,7 +34,8 @@ void main() {
     );
 
     // Expect the Add Word FAB to be present
-    expect(find.byType(FloatingActionButton), findsOneWidget);
+    // On wide screens the add button sits in the toolbar, not floating.
+    expect(find.byType(FloatingActionButton), findsNothing);
     expect(find.text('Add word'), findsOneWidget);
   });
 }

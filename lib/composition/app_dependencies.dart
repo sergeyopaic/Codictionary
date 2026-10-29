@@ -2,6 +2,7 @@ import '../data/backup/create_backup_files.dart';
 import '../data/backup/json_backup_codec.dart';
 import '../data/remote/deepl_translator.dart';
 import '../data/remote/openai_explainer.dart';
+import '../data/repositories/settings_repository_impl.dart';
 import '../data/repositories/vocabulary_repository_impl.dart';
 import '../data/repositories/word_repository_impl.dart';
 import '../data/storage/create_storage_service.dart';
@@ -18,6 +19,7 @@ import '../domain/usecases/recover_words.dart';
 import '../domain/usecases/remove_word.dart';
 import '../domain/usecases/reorder_words.dart';
 import '../domain/usecases/restore_word.dart';
+import '../domain/usecases/settings.dart';
 import '../domain/usecases/translate_word.dart';
 import '../domain/usecases/update_word.dart';
 import '../presentation/app_scope.dart';
@@ -64,6 +66,8 @@ AppUseCases buildUseCases({
     ),
     saveBackupFile: SaveBackupFile(export, backupFiles),
     backupFiles: BackupFileAccess(backupFiles),
+    loadSettings: LoadSettings(SettingsRepositoryImpl(storage)),
+    saveSettings: SaveSettings(SettingsRepositoryImpl(storage)),
   );
 }
 

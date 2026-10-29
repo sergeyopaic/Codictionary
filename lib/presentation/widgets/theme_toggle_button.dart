@@ -8,7 +8,7 @@ class ThemeToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = ThemeController.instance;
+    final controller = ThemeScope.of(context);
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: controller,
       builder: (context, _, _) => IconButton(

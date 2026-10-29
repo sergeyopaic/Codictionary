@@ -18,12 +18,14 @@ class SafeJsonStorage implements StorageService {
     this.backend, {
     required this.wordsKey,
     required this.vocabsKey,
+    this.settingsKey = 'settings.json',
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
   final StorageBackend backend;
   final String wordsKey;
   final String vocabsKey;
+  final String settingsKey;
   final DateTime Function() _clock;
 
   static String backupKey(String key) => '$key.bak';
@@ -104,6 +106,29 @@ class SafeJsonStorage implements StorageService {
           throw const FormatException('Expected an object'),
     ];
   }
+
+  // ---------------------------------------------------------------------------
+  // Settings (lenient: defaults rather than errors)
+
+  @override
+  Future<Map<String, String>> loadSettings() async {
+    try {
+      final raw = await backend.read(settingsKey);
+      if (raw == null) return {};
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      return {
+        for (final e in decoded.entries)
+          if (e.value is String) e.key.toString(): e.value as String,
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  @override
+  Future<void> saveSettings(Map<String, String> settings) =>
+      backend.write(settingsKey, jsonEncode(settings));
 
   // ---------------------------------------------------------------------------
   // Shared document logic

@@ -35,7 +35,9 @@ class DictionaryView extends StatefulWidget {
 
 class _DictionaryViewState extends State<DictionaryView> {
   static const double _minCardWidth = 240;
-  static const double _cardHeight = 156;
+
+  /// Card height at normal text size; grows with the text scale.
+  static const double _cardHeight = 148;
   static const double _gap = AppSpacing.lg;
 
   late final DictionaryViewModel vm;
@@ -232,6 +234,14 @@ class _DictionaryViewState extends State<DictionaryView> {
 
   Widget _buildScaffold(BuildContext context) {
     final wide = AppBreakpoints.isWide(context);
+    // Phones and short windows get a slim header so more words fit.
+    final compact = !wide || MediaQuery.sizeOf(context).height < 720;
+    // The one-row toolbar (search, sort, add) only fits on wide screens with
+    // normal-sized text; otherwise sort goes into a menu and "Add word" is a
+    // floating button.
+    final inlineToolbar =
+        MediaQuery.sizeOf(context).width >= 1100 &&
+        AppBreakpoints.textScale(context) <= 1.3;
     final pad = wide ? AppSpacing.xxl : AppSpacing.lg;
     final explained = vm.words
         .where(
@@ -262,20 +272,25 @@ class _DictionaryViewState extends State<DictionaryView> {
                           if (!wide) ...[
                             const Row(
                               children: [
-                                Expanded(child: BrandMark(size: 36)),
+                                Expanded(child: BrandMark(size: 30)),
                                 ThemeToggleButton(),
                               ],
                             ),
-                            const SizedBox(height: AppSpacing.lg),
+                            const SizedBox(height: AppSpacing.sm),
                           ],
                           DictionaryHero(
                             total: vm.words.length,
                             explained: explained,
-                            compact: !wide,
+                            compact: compact,
+                            aiAvailable: vm.aiAvailable,
                           ),
-                          const SizedBox(height: AppSpacing.xl),
-                          _buildToolbar(context, wide),
-                          const SizedBox(height: AppSpacing.lg),
+                          SizedBox(
+                            height: compact ? AppSpacing.md : AppSpacing.xl,
+                          ),
+                          _buildToolbar(context, inlineToolbar),
+                          SizedBox(
+                            height: compact ? AppSpacing.md : AppSpacing.lg,
+                          ),
                         ],
                       ),
                     ),
@@ -304,17 +319,24 @@ class _DictionaryViewState extends State<DictionaryView> {
           ],
         ),
       ),
-      floatingActionButton: AnimatedScale(
-        scale: vm.selectionMode || vm.loadError != null ? 0 : 1,
-        duration: AppMotion.medium,
-        curve: AppMotion.emphasized,
-        child: FloatingActionButton.extended(
-          tooltip: 'Add word (Ctrl+N)',
-          onPressed: vm.selectionMode || vm.loadError != null ? null : _addWord,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add word'),
-        ),
-      ),
+      floatingActionButton: inlineToolbar
+          ? null
+          : AnimatedScale(
+              scale: vm.selectionMode || vm.loadError != null ? 0 : 1,
+              duration: AppMotion.medium,
+              curve: AppMotion.emphasized,
+              child: FloatingActionButton.extended(
+                // Tabs stay alive in an IndexedStack, so several FABs coexist;
+                // without distinct tags opening a page crashes the hero animation.
+                heroTag: null,
+                tooltip: 'Add word (Ctrl+N)',
+                onPressed: vm.selectionMode || vm.loadError != null
+                    ? null
+                    : _addWord,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add word'),
+              ),
+            ),
     );
   }
 
@@ -378,6 +400,17 @@ class _DictionaryViewState extends State<DictionaryView> {
         ),
         const SizedBox(width: AppSpacing.sm),
         _selectButton(),
+        const SizedBox(width: AppSpacing.sm),
+        // On wide screens the add button lives here instead of a floating
+        // button, so it never covers a card.
+        FilledButton.icon(
+          style: const ButtonStyle(
+            minimumSize: WidgetStatePropertyAll(Size(0, 52)),
+          ),
+          onPressed: vm.selectionMode || vm.loadError != null ? null : _addWord,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add word'),
+        ),
       ],
     );
   }
@@ -409,9 +442,20 @@ class _DictionaryViewState extends State<DictionaryView> {
       return EmptyState(
         image: CodyArt.standing,
         title: 'Your dictionary is empty',
-        message:
+        message: switch ((vm.translationAvailable, vm.aiAvailable)) {
+          (true, true) =>
             'Add your first word — Cody will translate it and explain how '
-            'it\'s used. Or start with a few examples.',
+                'it\'s used. Or start with a few examples.',
+          (true, false) =>
+            'Add your first word — Cody will translate it. Or start with a '
+                'few examples.',
+          (false, true) =>
+            'Add your first word with its translation — Cody will explain '
+                'how it\'s used. Or start with a few examples.',
+          (false, false) =>
+            'Add your first word with its translation, or start with a few '
+                'examples.',
+        },
         action: Wrap(
           alignment: WrapAlignment.center,
           spacing: AppSpacing.sm,
@@ -503,7 +547,7 @@ class _DictionaryViewState extends State<DictionaryView> {
             crossAxisCount: columns,
             crossAxisSpacing: _gap,
             mainAxisSpacing: _gap,
-            mainAxisExtent: _cardHeight,
+            mainAxisExtent: _cardHeight * AppBreakpoints.textScale(context),
           ),
           itemBuilder: (context, i) {
             final word = vm.filtered[i];
@@ -521,9 +565,10 @@ class _DictionaryViewState extends State<DictionaryView> {
                   selected: vm.selected.contains(word.id),
                   onTap: () => _openDetails(word),
                   generating: vm.isGenerating(word.id, ExplanationKind.short),
-                  generationFailed:
-                      vm.generationError(word.id, ExplanationKind.short) !=
-                      null,
+                  generationError: vm.generationError(
+                    word.id,
+                    ExplanationKind.short,
+                  ),
                   aiAvailable: vm.aiAvailable,
                   onLongPress: vm.canReorder || vm.selectionMode
                       ? null

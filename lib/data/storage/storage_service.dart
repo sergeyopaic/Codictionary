@@ -15,6 +15,11 @@ abstract class StorageService {
   /// Recovers a damaged dictionary; the damaged data is kept aside.
   Future<void> recoverWords(StorageRecovery action);
 
+  /// Preferences. Missing or unreadable settings read as empty; saving
+  /// replaces them (they are not worth protecting like words).
+  Future<Map<String, String>> loadSettings();
+  Future<void> saveSettings(Map<String, String> settings);
+
   /// Collections. Same failure contract as words.
   Future<List<VocabularyRecord>> loadVocabularies();
   Future<void> saveVocabularies(List<VocabularyRecord> vocabs);

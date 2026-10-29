@@ -4,9 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../domain/exceptions/service_exceptions.dart';
-import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/failure_text.dart';
 import '../dictionary_view_model.dart';
 
 /// Opens the word details (AI explanation) as a dialog on wide screens and as
@@ -88,6 +87,11 @@ class _WordDetailsState extends State<WordDetails> {
 
   void _generateLong() => widget.vm.generateLongExplanation(widget.wordId);
 
+  bool _canRetry(ExplanationKind kind) {
+    final e = widget.vm.generationError(widget.wordId, kind);
+    return e == null || failureRetryHelps(e);
+  }
+
   String? _errorText(ExplanationKind kind) {
     final e = widget.vm.generationError(widget.wordId, kind);
     return e == null ? null : _describe(e);
@@ -95,12 +99,7 @@ class _WordDetailsState extends State<WordDetails> {
 
   /// User-facing text for a failed generation. Never shows raw provider
   /// responses or exception dumps.
-  static String _describe(Object e) => switch (e) {
-    StorageException() =>
-      'The explanation was generated but could not be saved.\n${e.message}',
-    ServiceException() => e.message,
-    _ => 'Something went wrong. Try again.',
-  };
+  static String _describe(Object e) => failureMessage(e);
 
   void _close(VoidCallback then) {
     Navigator.of(context).pop();
@@ -197,6 +196,7 @@ class _WordDetailsState extends State<WordDetails> {
                   text: text,
                   loading: widget.vm.isGenerating(widget.wordId, kind),
                   error: _errorText(kind),
+                  canRetry: _canRetry(kind),
                   emptyLabel: isShort
                       ? 'Generate explanation'
                       : 'Generate in-depth explanation',
@@ -223,6 +223,7 @@ class _ExplanationPanel extends StatefulWidget {
     required this.emptyLabel,
     required this.onGenerate,
     required this.aiAvailable,
+    this.canRetry = true,
   });
 
   final String title;
@@ -235,6 +236,10 @@ class _ExplanationPanel extends StatefulWidget {
 
   /// False in local mode: nothing can be generated, so nothing is offered.
   final bool aiAvailable;
+
+  /// False when repeating cannot help (missing or rejected key): no
+  /// "Try again" button then, only the advice.
+  final bool canRetry;
 
   @override
   State<_ExplanationPanel> createState() => _ExplanationPanelState();
@@ -274,11 +279,13 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
       body = _Message(
         icon: Icons.cloud_off_rounded,
         text: widget.error!,
-        action: FilledButton.tonalIcon(
-          onPressed: widget.onGenerate,
-          icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Try again'),
-        ),
+        action: widget.canRetry
+            ? FilledButton.tonalIcon(
+                onPressed: widget.onGenerate,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+              )
+            : null,
       );
     } else if (!hasText && !widget.aiAvailable) {
       body = const _Message(

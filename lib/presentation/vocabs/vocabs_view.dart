@@ -147,6 +147,11 @@ class _VocabsViewState extends State<VocabsView> {
     final pad = wide ? AppSpacing.xxl : AppSpacing.lg;
     final count = vm.vocabularies.length;
     final canEdit = vm.loaded && vm.loadError == null;
+    // The header button needs room next to the title; with less width or
+    // large text it becomes a floating button instead.
+    final headerButton =
+        MediaQuery.sizeOf(context).width >= 1100 &&
+        AppBreakpoints.textScale(context) <= 1.3;
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -165,7 +170,7 @@ class _VocabsViewState extends State<VocabsView> {
                     subtitle: count == 0
                         ? 'Organize words into themed collections'
                         : '$count ${count == 1 ? 'collection' : 'collections'}',
-                    trailing: wide && canEdit
+                    trailing: headerButton && canEdit
                         ? FilledButton.icon(
                             onPressed: _create,
                             icon: const Icon(Icons.add_rounded),
@@ -180,9 +185,12 @@ class _VocabsViewState extends State<VocabsView> {
           ),
         ),
       ),
-      floatingActionButton: wide || !canEdit
+      floatingActionButton: headerButton || !canEdit
           ? null
           : FloatingActionButton.extended(
+              // Tabs stay alive in an IndexedStack, so several FABs coexist;
+              // without distinct tags opening a page crashes the hero animation.
+              heroTag: null,
               icon: const Icon(Icons.add_rounded),
               label: const Text('New vocabulary'),
               onPressed: _create,
@@ -230,7 +238,7 @@ class _VocabsViewState extends State<VocabsView> {
             crossAxisCount: columns,
             mainAxisSpacing: gap,
             crossAxisSpacing: gap,
-            mainAxisExtent: 112,
+            mainAxisExtent: 112 * AppBreakpoints.textScale(context),
           ),
           itemCount: vm.vocabularies.length,
           itemBuilder: (context, i) {

@@ -247,123 +247,139 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
-        child: SingleChildScrollView(
+        // Only the fields scroll; the buttons stay visible even with large
+        // text or a small screen.
+        child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    child: Icon(
-                      _isEdit ? Icons.edit_rounded : Icons.translate_rounded,
-                      color: scheme.onPrimaryContainer,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.lg),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _isEdit ? 'Edit word' : 'Add a word',
-                          style: theme.textTheme.headlineSmall,
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                            ),
+                            child: Icon(
+                              _isEdit
+                                  ? Icons.edit_rounded
+                                  : Icons.translate_rounded,
+                              color: scheme.onPrimaryContainer,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.lg),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _isEdit ? 'Edit word' : 'Add a word',
+                                  style: theme.textTheme.headlineSmall,
+                                ),
+                                Text(
+                                  _subtitle,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      TextField(
+                        controller: _eng,
+                        autofocus: true,
+                        enabled: !_saving,
+                        textInputAction: TextInputAction.next,
+                        style: theme.textTheme.titleMedium,
+                        decoration: InputDecoration(
+                          labelText: 'English',
+                          hintText: 'e.g. serendipity',
+                          errorText: _engError,
+                          prefixIcon: const _LangBadge('EN'),
                         ),
-                        Text(
-                          _subtitle,
-                          style: theme.textTheme.bodyMedium?.copyWith(
+                        onChanged: _onEngChanged,
+                        onSubmitted: (_) => _save(),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      TextField(
+                        controller: _rus,
+                        enabled: !_saving,
+                        textInputAction: TextInputAction.done,
+                        style: theme.textTheme.titleMedium,
+                        decoration: InputDecoration(
+                          labelText: 'Russian',
+                          hintText: _autoTranslate
+                              ? 'Filled in automatically'
+                              : 'Type a translation',
+                          prefixIcon: const _LangBadge('RU'),
+                          helperText: _translateError,
+                          helperMaxLines: 3,
+                          helperStyle: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.error,
+                          ),
+                          suffixIcon: _translating
+                              ? const Padding(
+                                  padding: EdgeInsets.all(14),
+                                  child: SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                        onChanged: _onRusChanged,
+                        onSubmitted: (_) => _save(),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xs,
+                        ),
+                        value: _autoTranslate,
+                        onChanged: _saving || !widget.vm.translationAvailable
+                            ? null
+                            : _onAutoTranslateChanged,
+                        title: Text(
+                          'Auto-translate',
+                          style: theme.textTheme.titleSmall,
+                        ),
+                        subtitle: Text(
+                          widget.vm.translationAvailable
+                              ? 'Translate with DeepL as you type'
+                              : 'DeepL is not set up in this app',
+                          style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              TextField(
-                controller: _eng,
-                autofocus: true,
-                enabled: !_saving,
-                textInputAction: TextInputAction.next,
-                style: theme.textTheme.titleMedium,
-                decoration: InputDecoration(
-                  labelText: 'English',
-                  hintText: 'e.g. serendipity',
-                  errorText: _engError,
-                  prefixIcon: const _LangBadge('EN'),
-                ),
-                onChanged: _onEngChanged,
-                onSubmitted: (_) => _save(),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: _rus,
-                enabled: !_saving,
-                textInputAction: TextInputAction.done,
-                style: theme.textTheme.titleMedium,
-                decoration: InputDecoration(
-                  labelText: 'Russian',
-                  hintText: _autoTranslate
-                      ? 'Filled in automatically'
-                      : 'Type a translation',
-                  prefixIcon: const _LangBadge('RU'),
-                  helperText: _translateError,
-                  helperMaxLines: 3,
-                  helperStyle: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.error,
-                  ),
-                  suffixIcon: _translating
-                      ? const Padding(
-                          padding: EdgeInsets.all(14),
-                          child: SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      if (_saveError != null) ...[
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          _saveError!,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.error,
                           ),
-                        )
-                      : null,
-                ),
-                onChanged: _onRusChanged,
-                onSubmitted: (_) => _save(),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.xs,
-                ),
-                value: _autoTranslate,
-                onChanged: _saving || !widget.vm.translationAvailable
-                    ? null
-                    : _onAutoTranslateChanged,
-                title: Text(
-                  'Auto-translate',
-                  style: theme.textTheme.titleSmall,
-                ),
-                subtitle: Text(
-                  widget.vm.translationAvailable
-                      ? 'Translate with DeepL as you type'
-                      : 'DeepL is not set up in this app',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ),
-              if (_saveError != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  _saveError!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: scheme.error,
-                  ),
-                ),
-              ],
               const SizedBox(height: AppSpacing.lg),
               // Stacks the buttons when a long label does not fit.
               OverflowBar(

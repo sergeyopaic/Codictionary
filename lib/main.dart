@@ -7,5 +7,8 @@ import 'presentation/app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
-  runApp(CodictionaryApp(useCases: buildProductionUseCases(config)));
+  final useCases = buildProductionUseCases(config);
+  // Read before the first frame so the saved theme applies without a flash.
+  final settings = await useCases.loadSettings();
+  runApp(CodictionaryApp(useCases: useCases, initialSettings: settings));
 }

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// Holds the user's light/dark preference for the running session.
+import '../../domain/entities/app_settings.dart';
+
+/// The user's light/dark preference. Created by the app with the saved
+/// value; changes are reported through [onChanged] so they can be saved.
 class ThemeController extends ValueNotifier<ThemeMode> {
   ThemeController([super.value = ThemeMode.system]);
-
-  static final ThemeController instance = ThemeController();
 
   /// Cycles system → light → dark → system.
   void cycle() {
@@ -22,8 +23,35 @@ class ThemeController extends ValueNotifier<ThemeMode> {
   };
 
   String get label => switch (value) {
-    ThemeMode.system => 'System theme',
-    ThemeMode.light => 'Light theme',
-    ThemeMode.dark => 'Dark theme',
+    ThemeMode.system => 'Theme: follows the system',
+    ThemeMode.light => 'Theme: light',
+    ThemeMode.dark => 'Theme: dark',
   };
+
+  static ThemeMode fromPreference(ThemePreference p) => switch (p) {
+    ThemePreference.system => ThemeMode.system,
+    ThemePreference.light => ThemeMode.light,
+    ThemePreference.dark => ThemeMode.dark,
+  };
+
+  static ThemePreference toPreference(ThemeMode m) => switch (m) {
+    ThemeMode.system => ThemePreference.system,
+    ThemeMode.light => ThemePreference.light,
+    ThemeMode.dark => ThemePreference.dark,
+  };
+}
+
+/// Provides the app's [ThemeController] to the widget tree.
+class ThemeScope extends InheritedNotifier<ThemeController> {
+  const ThemeScope({
+    super.key,
+    required ThemeController controller,
+    required super.child,
+  }) : super(notifier: controller);
+
+  static ThemeController of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<ThemeScope>();
+    assert(scope != null, 'No ThemeScope above this widget');
+    return scope!.notifier!;
+  }
 }

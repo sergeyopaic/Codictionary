@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/entities/word_entity.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/failure_text.dart';
 import '../../widgets/word_card_menu.dart';
 
 /// A single dictionary entry in the grid.
@@ -14,7 +15,7 @@ class WordCard extends StatefulWidget {
     required this.onTap,
     this.onLongPress,
     this.generating = false,
-    this.generationFailed = false,
+    this.generationError,
     this.aiAvailable = true,
     required this.onToggleSelect,
     required this.onExplain,
@@ -33,7 +34,7 @@ class WordCard extends StatefulWidget {
 
   /// State of the short explanation, shown in the preview line.
   final bool generating;
-  final bool generationFailed;
+  final Object? generationError;
   final bool aiAvailable;
   final VoidCallback onToggleSelect;
   final VoidCallback onExplain;
@@ -102,11 +103,18 @@ class _WordCardState extends State<WordCard> {
                   Row(
                     children: [
                       Expanded(
+                        // Long phrases get two lines in a smaller size
+                        // instead of being cut after a few words.
                         child: Text(
                           word.source,
-                          maxLines: 1,
+                          maxLines: word.source.length > 20 ? 2 : 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleLarge,
+                          style: word.source.length > 20
+                              ? theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.2,
+                                )
+                              : theme.textTheme.titleLarge,
                         ),
                       ),
                       _buildTrailing(scheme),
@@ -130,7 +138,7 @@ class _WordCardState extends State<WordCard> {
                     child: _DescriptionPreview(
                       desc: word.shortExplanation,
                       generating: widget.generating,
-                      failed: widget.generationFailed,
+                      error: widget.generationError,
                       aiAvailable: widget.aiAvailable,
                     ),
                   ),
@@ -178,13 +186,13 @@ class _DescriptionPreview extends StatelessWidget {
   const _DescriptionPreview({
     required this.desc,
     required this.generating,
-    required this.failed,
+    required this.error,
     required this.aiAvailable,
   });
 
   final String? desc;
   final bool generating;
-  final bool failed;
+  final Object? error;
   final bool aiAvailable;
 
   @override
@@ -210,9 +218,9 @@ class _DescriptionPreview extends StatelessWidget {
         desc!.trim(),
         null,
       ),
-      _ when failed => (
+      _ when error != null => (
         Icon(Icons.error_outline_rounded, size: 14, color: scheme.error),
-        'Explanation failed — open to try again',
+        'Explanation failed: ${failureShortReason(error!)} — open for details',
         scheme.error,
       ),
       _ when !aiAvailable => (

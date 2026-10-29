@@ -36,6 +36,15 @@ class JsonStorageService implements StorageService {
   Future<void> recoverWords(StorageRecovery action) async =>
       throw UnsupportedError('JsonStorageService never reports damage');
 
+  Map<String, String> settings = {};
+
+  @override
+  Future<Map<String, String>> loadSettings() async => Map.of(settings);
+
+  @override
+  Future<void> saveSettings(Map<String, String> values) async =>
+      settings = Map.of(values);
+
   @override
   Future<List<VocabularyRecord>> loadVocabularies() async => [
     for (final e in jsonDecode(vocabsJson) as List)
