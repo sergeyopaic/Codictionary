@@ -61,6 +61,12 @@ class VocabularyRepositoryImpl implements VocabularyRepository {
   });
 
   @override
+  Future<void> replaceAll(List<Vocabulary> vocabularies) => _serialized(
+    () =>
+        storage.saveVocabularies([for (final v in vocabularies) _toRecord(v)]),
+  );
+
+  @override
   Future<void> setMembership(String vocabularyId, String wordId, bool member) =>
       _serialized(() async {
         final records = await _loadNormalized();

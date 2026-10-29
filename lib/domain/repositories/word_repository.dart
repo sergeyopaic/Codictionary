@@ -23,6 +23,10 @@ abstract class WordRepository {
   /// their relative order after the listed ones; unknown ids are ignored.
   Future<void> reorder(List<String> orderedIds);
 
+  /// Replaces every stored word with [words], in that manual order, keeping
+  /// their ids and creation dates (restore from a backup).
+  Future<void> replaceAll(List<WordEntity> words);
+
   /// Recovers damaged stored words; the damaged data is kept aside.
   Future<void> recover(StorageRecovery action);
 }

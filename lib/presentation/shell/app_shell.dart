@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../backup/backup_view.dart';
 import '../dictionary/dictionary_view.dart';
 import '../theme/app_tokens.dart';
 import '../theme/theme_controller.dart';
@@ -20,6 +21,11 @@ const _destinations = [
     Icons.collections_bookmark_outlined,
     Icons.collections_bookmark_rounded,
   ),
+  _Destination(
+    'Backup',
+    Icons.settings_backup_restore_outlined,
+    Icons.settings_backup_restore_rounded,
+  ),
 ];
 
 /// Adaptive app frame: a sidebar on wide screens, a bottom navigation bar on
@@ -34,14 +40,21 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
+  /// Bumped after a restore so pages that keep state reload their data.
+  int _dataGeneration = 0;
+
   @override
   Widget build(BuildContext context) {
     final wide = AppBreakpoints.isWide(context);
     final pages = IndexedStack(
       index: _index,
       children: [
-        const DictionaryView(),
+        DictionaryView(dataGeneration: _dataGeneration),
         VocabsView(isActive: _index == 1),
+        BackupView(
+          isActive: _index == 2,
+          onRestored: () => setState(() => _dataGeneration++),
+        ),
       ],
     );
 

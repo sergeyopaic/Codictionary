@@ -24,7 +24,10 @@ import 'widgets/word_details_sheet.dart';
 import 'widgets/word_editor_dialog.dart';
 
 class DictionaryView extends StatefulWidget {
-  const DictionaryView({super.key});
+  const DictionaryView({super.key, this.dataGeneration = 0});
+
+  /// Changes when the stored data was replaced (restore); triggers a reload.
+  final int dataGeneration;
 
   @override
   State<DictionaryView> createState() => _DictionaryViewState();
@@ -56,6 +59,15 @@ class _DictionaryViewState extends State<DictionaryView> {
     _debounce = Timer(const Duration(milliseconds: 250), () {
       vm.onQueryChanged(_search.text);
     });
+  }
+
+  @override
+  void didUpdateWidget(DictionaryView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.dataGeneration != oldWidget.dataGeneration) {
+      if (vm.selectionMode) vm.toggleSelectionMode(false);
+      vm.load();
+    }
   }
 
   @override

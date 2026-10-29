@@ -4,6 +4,8 @@ import 'package:codictionary/composition/app_dependencies.dart';
 import 'package:codictionary/data/repositories/word_repository_impl.dart';
 import 'package:codictionary/data/storage/storage_service.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
+import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
+import 'package:codictionary/domain/services/backup_files.dart';
 import 'package:codictionary/domain/services/translator.dart';
 import 'package:codictionary/domain/services/word_explainer.dart';
 import 'package:codictionary/presentation/app_scope.dart';
@@ -15,10 +17,12 @@ AppUseCases testUseCases({
   required StorageService storage,
   WordExplainer? explainer,
   Translator? translator,
+  BackupFiles? backupFiles,
 }) => buildUseCases(
   storage: storage,
   explainer: explainer ?? const NoExplainer(),
   translator: translator ?? FakeTranslate(),
+  backupFiles: backupFiles ?? MemoryBackupFiles(),
 );
 
 /// Stores [words] through the real repository, as if a user had added them
@@ -93,4 +97,37 @@ class ControlledTranslate implements Translator {
     calls.add((text: eng, completer: completer));
     return completer.future;
   }
+}
+
+/// Backup files kept in memory; [failSave] simulates a full disk.
+class MemoryBackupFiles implements BackupFiles {
+  final Map<String, String> saved = {};
+  bool failSave = false;
+  String? toPick;
+
+  @override
+  Future<String> save(String fileName, String contents) async {
+    if (failSave) throw const StorageWriteException('disk full');
+    saved[fileName] = contents;
+    return 'memory/$fileName';
+  }
+
+  @override
+  Future<List<BackupFile>> list() async => [
+    for (final name in saved.keys.toList().reversed)
+      BackupFile(
+        name: name,
+        location: 'memory/$name',
+        modified: DateTime.utc(2025),
+      ),
+  ];
+
+  @override
+  Future<String> read(BackupFile file) async => saved[file.name]!;
+
+  @override
+  bool get canPick => toPick != null;
+
+  @override
+  Future<String?> pick() async => toPick;
 }

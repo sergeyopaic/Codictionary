@@ -76,6 +76,11 @@ class WordRepositoryImpl implements WordRepository {
   });
 
   @override
+  Future<void> replaceAll(List<WordEntity> words) => _serialized(
+    () => storage.saveWords([for (final w in words) _toRecord(w)]),
+  );
+
+  @override
   Future<void> recover(StorageRecovery action) =>
       _serialized(() => storage.recoverWords(action));
 

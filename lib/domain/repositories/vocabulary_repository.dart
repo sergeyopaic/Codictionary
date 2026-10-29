@@ -18,6 +18,9 @@ abstract class VocabularyRepository {
   /// Removes a collection and its links; the words themselves stay.
   Future<void> remove(String id);
 
+  /// Replaces every stored collection (restore from a backup).
+  Future<void> replaceAll(List<Vocabulary> vocabularies);
+
   /// Adds or removes one word, atomically. Idempotent.
   Future<void> setMembership(String vocabularyId, String wordId, bool member);
 }

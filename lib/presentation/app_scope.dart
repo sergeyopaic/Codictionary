@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../domain/usecases/add_word.dart';
+import '../domain/usecases/backup.dart';
 import '../domain/usecases/explain_word.dart';
 import '../domain/usecases/get_all_words.dart';
 import '../domain/usecases/get_vocabularies.dart';
@@ -31,6 +32,11 @@ class AppUseCases {
     required this.deleteVocabulary,
     required this.restoreVocabulary,
     required this.setWordInVocabulary,
+    required this.exportDictionary,
+    required this.parseBackup,
+    required this.replaceDictionary,
+    required this.saveBackupFile,
+    required this.backupFiles,
   });
 
   final GetAllWords getAllWords;
@@ -48,6 +54,11 @@ class AppUseCases {
   final DeleteVocabulary deleteVocabulary;
   final RestoreVocabulary restoreVocabulary;
   final SetWordInVocabulary setWordInVocabulary;
+  final ExportDictionary exportDictionary;
+  final ParseBackup parseBackup;
+  final ReplaceDictionary replaceDictionary;
+  final SaveBackupFile saveBackupFile;
+  final BackupFileAccess backupFiles;
 }
 
 /// Provides [AppUseCases] to the widget tree. Immutable: rebuilding the app

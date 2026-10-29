@@ -1,11 +1,15 @@
+import '../data/backup/create_backup_files.dart';
+import '../data/backup/json_backup_codec.dart';
 import '../data/remote/deepl_translator.dart';
 import '../data/remote/openai_explainer.dart';
 import '../data/repositories/vocabulary_repository_impl.dart';
 import '../data/repositories/word_repository_impl.dart';
 import '../data/storage/create_storage_service.dart';
+import '../domain/services/backup_files.dart';
 import '../domain/services/translator.dart';
 import '../domain/services/word_explainer.dart';
 import '../domain/usecases/add_word.dart';
+import '../domain/usecases/backup.dart';
 import '../domain/usecases/explain_word.dart';
 import '../domain/usecases/get_all_words.dart';
 import '../domain/usecases/get_vocabularies.dart';
@@ -28,10 +32,12 @@ AppUseCases buildUseCases({
   required StorageService storage,
   required WordExplainer explainer,
   required Translator translator,
+  required BackupFiles backupFiles,
 }) {
   // One repository instance per storage: it serializes read–modify–write.
   final words = WordRepositoryImpl(storage);
   final vocabularies = VocabularyRepositoryImpl(storage);
+  final export = ExportDictionary(words, vocabularies, const JsonBackupCodec());
   return AppUseCases(
     getAllWords: GetAllWords(words),
     addWord: AddWord(words),
@@ -48,6 +54,16 @@ AppUseCases buildUseCases({
     deleteVocabulary: DeleteVocabulary(vocabularies),
     restoreVocabulary: RestoreVocabulary(vocabularies),
     setWordInVocabulary: SetWordInVocabulary(vocabularies),
+    exportDictionary: export,
+    parseBackup: ParseBackup(const JsonBackupCodec()),
+    replaceDictionary: ReplaceDictionary(
+      words,
+      vocabularies,
+      export,
+      backupFiles,
+    ),
+    saveBackupFile: SaveBackupFile(export, backupFiles),
+    backupFiles: BackupFileAccess(backupFiles),
   );
 }
 
@@ -55,4 +71,5 @@ AppUseCases buildProductionUseCases(AppConfig config) => buildUseCases(
   storage: createStorageService(),
   explainer: OpenAiExplainer(config.openAiApiKey),
   translator: DeepLTranslator(config.deeplApiKey),
+  backupFiles: createBackupFiles(),
 );
