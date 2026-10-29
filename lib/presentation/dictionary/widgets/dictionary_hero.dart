@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_tokens.dart';
+import '../../l10n/app_strings.dart';
 
 /// Brand banner at the top of the dictionary with Cody and quick stats.
 class DictionaryHero extends StatelessWidget {
@@ -34,15 +35,16 @@ class DictionaryHero extends StatelessWidget {
         ? Color.lerp(scheme.primaryContainer, scheme.secondaryContainer, 0.6)!
         : Color.lerp(scheme.primary, scheme.secondary, 0.45)!;
 
+    final s = context.s;
     final aiPill = aiAvailable
         ? _StatPill(
             icon: Icons.auto_awesome_rounded,
-            label: '$explained explained by AI',
+            label: s.heroExplained(explained),
             color: fg,
           )
         : _StatPill(
             icon: Icons.auto_awesome_outlined,
-            label: 'AI explanations off',
+            label: s.heroAiOff,
             color: fg,
           );
 
@@ -60,18 +62,16 @@ class DictionaryHero extends StatelessWidget {
           colors: [start, end],
         ),
       ),
-      child: compact ? _compact(theme, fg, aiPill) : _full(theme, fg, aiPill),
+      child: compact
+          ? _compact(s, theme, fg, aiPill)
+          : _full(s, theme, fg, aiPill),
     );
   }
 
-  Widget _compact(ThemeData theme, Color fg, Widget aiPill) {
+  Widget _compact(AppStrings s, ThemeData theme, Color fg, Widget aiPill) {
     // Cody peeks in from the right, cut at the chest.
     const codyHeight = 124.0;
-    final title = total == 0
-        ? 'Start your dictionary'
-        : total == 1
-        ? '1 word'
-        : '$total words';
+    final title = total == 0 ? s.heroStart : s.wordCount(total);
     return Stack(
       children: [
         Positioned(
@@ -83,6 +83,9 @@ class DictionaryHero extends StatelessWidget {
           right: AppSpacing.md,
           top: 6,
           child: Image.asset(
+            // Decorative: a text next to it says the same.
+            excludeFromSemantics: true,
+
             CodyArt.standing,
             height: codyHeight,
             filterQuality: FilterQuality.high,
@@ -117,15 +120,11 @@ class DictionaryHero extends StatelessWidget {
     );
   }
 
-  Widget _full(ThemeData theme, Color fg, Widget aiPill) {
+  Widget _full(AppStrings s, ThemeData theme, Color fg, Widget aiPill) {
     const codyHeight = 190.0;
     // Gap between Cody's feet and the bottom edge of the banner.
     const feetGap = 12.0;
-    final title = total == 0
-        ? "Let's build your dictionary"
-        : total == 1
-        ? '1 word and counting'
-        : '$total words and counting';
+    final title = total == 0 ? s.heroTitleEmpty : s.heroTitle(total);
     return Stack(
       children: [
         // Soft decorative shapes for depth.
@@ -143,6 +142,9 @@ class DictionaryHero extends StatelessWidget {
           right: AppSpacing.xxl,
           bottom: feetGap - codyHeight * CodyArt.standingBottomMargin,
           child: Image.asset(
+            // Decorative: a text next to it says the same.
+            excludeFromSemantics: true,
+
             CodyArt.standing,
             height: codyHeight,
             filterQuality: FilterQuality.high,
@@ -160,7 +162,7 @@ class DictionaryHero extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'YOUR DICTIONARY',
+                s.heroEyebrow,
                 style: theme.textTheme.labelMedium?.copyWith(
                   color: fg.withValues(alpha: 0.8),
                   fontWeight: FontWeight.w700,
@@ -185,7 +187,7 @@ class DictionaryHero extends StatelessWidget {
                   aiPill,
                   _StatPill(
                     icon: Icons.translate_rounded,
-                    label: 'English → Russian',
+                    label: s.heroDirection,
                     color: fg,
                   ),
                 ],

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
+import '../l10n/app_strings.dart';
 
 const int _iconCount = 14;
 
@@ -94,6 +95,9 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                         ),
                         padding: const EdgeInsets.all(AppSpacing.sm),
                         child: Image.asset(
+                          // Decorative: a text next to it says the same.
+                          excludeFromSemantics: true,
+
                           vocabIconHiRes(vocabIconPath(selectedIcon)),
                           filterQuality: FilterQuality.high,
                         ),
@@ -105,11 +109,13 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _isEdit ? 'Edit vocabulary' : 'New vocabulary',
+                            _isEdit
+                                ? context.s.editVocabulary
+                                : context.s.newVocabulary,
                             style: theme.textTheme.headlineSmall,
                           ),
                           Text(
-                            'Group related words into a themed collection.',
+                            context.s.vocabDialogSubtitle,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurfaceVariant,
                             ),
@@ -123,14 +129,14 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                 TextFormField(
                   controller: nameController,
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Name',
-                    hintText: 'e.g. Travel phrases',
+                  decoration: InputDecoration(
+                    labelText: context.s.name,
+                    hintText: context.s.nameHint,
                   ),
                   textInputAction: TextInputAction.next,
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) {
-                      return 'Please enter a name';
+                      return context.s.nameRequired;
                     }
                     return null;
                   },
@@ -138,14 +144,14 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                 const SizedBox(height: AppSpacing.md),
                 TextFormField(
                   controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (optional)',
+                  decoration: InputDecoration(
+                    labelText: context.s.descriptionOptional,
                   ),
                   minLines: 1,
                   maxLines: 3,
                 ),
                 const SizedBox(height: AppSpacing.xl),
-                Text('Icon', style: theme.textTheme.titleSmall),
+                Text(context.s.icon, style: theme.textTheme.titleSmall),
                 const SizedBox(height: AppSpacing.md),
                 Wrap(
                   spacing: AppSpacing.sm,
@@ -165,12 +171,12 @@ class _CreateVocabularyDialogState extends State<CreateVocabularyDialog> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(null),
-                      child: const Text('Cancel'),
+                      child: Text(context.s.cancel),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     FilledButton(
                       onPressed: _submit,
-                      child: Text(_isEdit ? 'Save' : 'Create'),
+                      child: Text(_isEdit ? context.s.save : context.s.create),
                     ),
                   ],
                 ),
@@ -216,6 +222,9 @@ class _IconOption extends StatelessWidget {
           ),
         ),
         child: Image.asset(
+          // Decorative: a text next to it says the same.
+          excludeFromSemantics: true,
+
           path,
           filterQuality: FilterQuality.high,
           errorBuilder: (_, _, _) =>

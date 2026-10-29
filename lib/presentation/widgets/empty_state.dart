@@ -46,7 +46,12 @@ class EmptyState extends StatelessWidget {
                           0,
                         )
                       : Offset.zero,
-                  child: Image.asset(image, filterQuality: FilterQuality.high),
+                  child: Image.asset(
+                    // Decorative: a text next to it says the same.
+                    excludeFromSemantics: true,
+                    image,
+                    filterQuality: FilterQuality.high,
+                  ),
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),

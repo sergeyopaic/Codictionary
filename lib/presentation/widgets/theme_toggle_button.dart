@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/theme_controller.dart';
+import '../l10n/app_strings.dart';
 
 /// Icon button cycling between system, light and dark themes.
 class ThemeToggleButton extends StatelessWidget {
@@ -12,7 +13,11 @@ class ThemeToggleButton extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: controller,
       builder: (context, _, _) => IconButton(
-        tooltip: controller.label,
+        tooltip: switch (controller.value) {
+          ThemeMode.system => context.s.themeFollowsSystem,
+          ThemeMode.light => context.s.themeIsLight,
+          ThemeMode.dark => context.s.themeIsDark,
+        },
         onPressed: controller.cycle,
         icon: AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),

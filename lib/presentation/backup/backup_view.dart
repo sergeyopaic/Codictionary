@@ -6,6 +6,7 @@ import '../../domain/exceptions/backup_exceptions.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
 import '../../domain/services/backup_files.dart';
 import '../app_scope.dart';
+import '../l10n/app_strings.dart';
 import '../dialogs/confirm_dialog.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/page_header.dart';
@@ -29,7 +30,9 @@ class _BackupViewState extends State<BackupView> {
   late final AppUseCases _useCases = AppScope.read(context);
 
   DictionarySnapshot? _current;
-  String? _currentError;
+
+  /// Why the current data could not be read; worded at build time.
+  StorageException? _currentError;
   List<BackupFile> _files = const [];
   bool _busy = false;
   String? _message;
@@ -49,12 +52,12 @@ class _BackupViewState extends State<BackupView> {
 
   Future<void> _refresh() async {
     DictionarySnapshot? current;
-    String? error;
+    StorageException? error;
     var files = const <BackupFile>[];
     try {
       current = await _useCases.exportDictionary.snapshot();
     } on StorageException catch (e) {
-      error = e.message;
+      error = e;
     }
     try {
       files = await _useCases.backupFiles.list();
@@ -89,27 +92,29 @@ class _BackupViewState extends State<BackupView> {
   // ---------------------------------------------------------------------------
   // Export
 
+  // Strings are taken before the first await of each action: the widget
+  // may rebuild (or go away) while it waits.
+
   Future<void> _saveFile() => _run(() async {
+    final s = context.s;
     try {
       final location = await _useCases.saveBackupFile();
-      _show('Backup saved: $location');
+      _show(s.backupSaved(location));
       await _refresh();
     } on StorageException catch (e) {
-      _show('Not saved: ${e.message}', error: true);
+      _show(s.notSaved(s.storageError(e)), error: true);
     }
   });
 
   Future<void> _copy() => _run(() async {
+    final s = context.s;
     try {
       await Clipboard.setData(
         ClipboardData(text: await _useCases.exportDictionary()),
       );
-      _show(
-        'Backup copied. Paste it somewhere safe, or into Codictionary on '
-        'another device.',
-      );
+      _show(s.backupCopied);
     } on StorageException catch (e) {
-      _show('Not copied: ${e.message}', error: true);
+      _show(s.notCopied(s.storageError(e)), error: true);
     }
   });
 
@@ -117,78 +122,71 @@ class _BackupViewState extends State<BackupView> {
   // Restore
 
   Future<void> _paste() async {
+    final s = context.s;
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
     if (text.isEmpty) {
-      _show('The clipboard is empty. Copy a backup first.', error: true);
+      _show(s.clipboardEmpty, error: true);
       return;
     }
-    await _restore(text);
+    await _restore(text, s);
   }
 
   Future<void> _pick() async {
+    final s = context.s;
     final text = await _useCases.backupFiles.pick();
-    if (text != null) await _restore(text);
+    if (text != null) await _restore(text, s);
   }
 
   Future<void> _restoreFile(BackupFile file) async {
+    final s = context.s;
     try {
-      await _restore(await _useCases.backupFiles.read(file));
+      await _restore(await _useCases.backupFiles.read(file), s);
     } on StorageException catch (e) {
-      _show('Could not read ${file.name}: ${e.message}', error: true);
+      _show(s.couldNotRead(file.name, s.storageError(e)), error: true);
     }
   }
 
-  Future<void> _restore(String text) async {
+  Future<void> _restore(String text, AppStrings s) async {
     final DictionarySnapshot backup;
     try {
       backup = _useCases.parseBackup(text);
     } on BackupFormatException catch (e) {
-      _show(
-        'This is not a valid backup: ${e.message} Nothing was changed.',
-        error: true,
-      );
+      _show(s.invalidBackup(s.backupProblem(e)), error: true);
       return;
     }
     final current = _current;
     if (current == null) {
-      _show(
-        'Your current data cannot be read, so it cannot be backed up before '
-        'restoring. Use the recovery options on the Dictionary tab first.',
-        error: true,
-      );
+      _show(s.currentUnreadable, error: true);
       return;
     }
     if (!mounted) return;
     final ok = await showConfirmDialog(
       context,
-      title: 'Replace your dictionary?',
-      message:
-          'Backup from ${_date(backup.createdAt)}: ${_count(backup)}.\n'
-          'It replaces your current ${_count(current)}. A safety copy of the '
-          'current data is saved first.',
-      confirmLabel: 'Replace',
+      title: s.replaceTitle,
+      message: s.replaceMessage(
+        _date(backup.createdAt),
+        _count(s, backup),
+        _count(s, current),
+      ),
+      confirmLabel: s.replace,
       confirmIcon: Icons.settings_backup_restore_rounded,
     );
     if (!ok) return;
     await _run(() async {
       try {
         final safetyCopy = await _useCases.replaceDictionary(backup);
-        _show('Restored ${_count(backup)}. Safety copy: $safetyCopy');
+        _show(s.restored(_count(s, backup), safetyCopy));
         widget.onRestored?.call();
         await _refresh();
       } on StorageException catch (e) {
-        _show('Not restored: ${e.message}', error: true);
+        _show(s.notRestored(s.storageError(e)), error: true);
       }
     });
   }
 
-  static String _count(DictionarySnapshot s) {
-    final w = s.words.length;
-    final v = s.vocabularies.length;
-    return '${w == 1 ? '1 word' : '$w words'} and '
-        '${v == 1 ? '1 vocabulary' : '$v vocabularies'}';
-  }
+  static String _count(AppStrings s, DictionarySnapshot snapshot) =>
+      s.snapshotCount(snapshot.words.length, snapshot.vocabularies.length);
 
   static String _date(DateTime d) {
     final l = d.toLocal();
@@ -217,50 +215,48 @@ class _BackupViewState extends State<BackupView> {
             child: ListView(
               padding: EdgeInsets.fromLTRB(pad, pad, pad, 120),
               children: [
-                const PageHeader(
-                  title: 'Backup',
-                  subtitle: 'Save your words or move them to another device',
+                PageHeader(
+                  title: context.s.backupTitle,
+                  subtitle: context.s.backupSubtitle,
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 _Section(
                   icon: Icons.download_rounded,
-                  title: 'Back up your dictionary',
+                  title: context.s.backUpTitle,
                   text: current != null
-                      ? '${_count(current)}, with explanations, dates and '
-                            'your own order.'
-                      : _currentError ?? 'Reading your data…',
+                      ? context.s.backUpText(_count(context.s, current))
+                      : _currentError != null
+                      ? context.s.storageError(_currentError!)
+                      : context.s.readingData,
                   actions: [
                     FilledButton.icon(
                       onPressed: _busy || current == null ? null : _saveFile,
                       icon: const Icon(Icons.save_alt_rounded),
-                      label: const Text('Save backup file'),
+                      label: Text(context.s.saveBackupFile),
                     ),
                     OutlinedButton.icon(
                       onPressed: _busy || current == null ? null : _copy,
                       icon: const Icon(Icons.copy_rounded),
-                      label: const Text('Copy to clipboard'),
+                      label: Text(context.s.copyToClipboard),
                     ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.settings_backup_restore_rounded,
-                  title: 'Restore from a backup',
-                  text:
-                      'Restoring replaces your current dictionary and '
-                      'vocabularies. A safety copy of the current data is '
-                      'saved first.',
+                  title: context.s.restoreTitle,
+                  text: context.s.restoreText,
                   actions: [
                     FilledButton.tonalIcon(
                       onPressed: _busy ? null : _paste,
                       icon: const Icon(Icons.content_paste_rounded),
-                      label: const Text('Paste from clipboard'),
+                      label: Text(context.s.pasteFromClipboard),
                     ),
                     if (_useCases.backupFiles.canPick)
                       OutlinedButton.icon(
                         onPressed: _busy ? null : _pick,
                         icon: const Icon(Icons.folder_open_rounded),
-                        label: const Text('Open file…'),
+                        label: Text(context.s.openFile),
                       ),
                   ],
                   footer: _files.isEmpty
@@ -270,7 +266,7 @@ class _BackupViewState extends State<BackupView> {
                           children: [
                             const SizedBox(height: AppSpacing.md),
                             Text(
-                              'Backups on this device',
+                              context.s.backupsOnDevice,
                               style: theme.textTheme.titleSmall,
                             ),
                             for (final f in _files)
@@ -288,7 +284,7 @@ class _BackupViewState extends State<BackupView> {
                                   onPressed: _busy
                                       ? null
                                       : () => _restoreFile(f),
-                                  child: const Text('Restore'),
+                                  child: Text(context.s.restore),
                                 ),
                               ),
                           ],

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/failure_text.dart';
 import '../dictionary_view_model.dart';
+import '../../l10n/app_strings.dart';
 
 /// Opens the word details (AI explanation) as a dialog on wide screens and as
 /// a bottom sheet on narrow ones.
@@ -99,7 +100,7 @@ class _WordDetailsState extends State<WordDetails> {
 
   /// User-facing text for a failed generation. Never shows raw provider
   /// responses or exception dumps.
-  static String _describe(Object e) => failureMessage(e);
+  String _describe(Object e) => context.s.failureMessage(e);
 
   void _close(VoidCallback then) {
     Navigator.of(context).pop();
@@ -145,18 +146,18 @@ class _WordDetailsState extends State<WordDetails> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Edit word',
+                  tooltip: context.s.editWord,
                   onPressed: () => _close(widget.onEdit),
                   icon: const Icon(Icons.edit_outlined),
                 ),
                 IconButton(
-                  tooltip: 'Delete',
+                  tooltip: context.s.delete,
                   onPressed: () => _close(widget.onDelete),
                   icon: Icon(Icons.delete_outline_rounded, color: scheme.error),
                 ),
                 if (AppBreakpoints.isWide(context))
                   IconButton(
-                    tooltip: 'Close',
+                    tooltip: context.s.close,
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close_rounded),
                   ),
@@ -167,16 +168,16 @@ class _WordDetailsState extends State<WordDetails> {
               alignment: Alignment.centerLeft,
               child: SegmentedButton<int>(
                 showSelectedIcon: false,
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: 0,
                     icon: Icon(Icons.bolt_rounded),
-                    label: Text('Quick'),
+                    label: Text(context.s.quick),
                   ),
                   ButtonSegment(
                     value: 1,
                     icon: Icon(Icons.article_outlined),
-                    label: Text('In depth'),
+                    label: Text(context.s.inDepth),
                   ),
                 ],
                 selected: {_tab},
@@ -189,7 +190,9 @@ class _WordDetailsState extends State<WordDetails> {
                 duration: AppMotion.medium,
                 child: _ExplanationPanel(
                   key: ValueKey(_tab),
-                  title: isShort ? 'Quick explanation' : 'In-depth explanation',
+                  title: isShort
+                      ? context.s.quickExplanation
+                      : context.s.inDepthExplanation,
                   color: isShort
                       ? scheme.secondaryContainer
                       : scheme.tertiaryContainer,
@@ -198,8 +201,8 @@ class _WordDetailsState extends State<WordDetails> {
                   error: _errorText(kind),
                   canRetry: _canRetry(kind),
                   emptyLabel: isShort
-                      ? 'Generate explanation'
-                      : 'Generate in-depth explanation',
+                      ? context.s.generateExplanation
+                      : context.s.generateInDepth,
                   onGenerate: isShort ? _regenerateShort : _generateLong,
                   aiAvailable: widget.vm.aiAvailable,
                 ),
@@ -283,21 +286,19 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
             ? FilledButton.tonalIcon(
                 onPressed: widget.onGenerate,
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try again'),
+                label: Text(context.s.tryAgain),
               )
             : null,
       );
     } else if (!hasText && !widget.aiAvailable) {
-      body = const _Message(
+      body = _Message(
         icon: Icons.cloud_off_rounded,
-        text:
-            'AI explanations are off: no OpenAI key is set up. Your words '
-            'are still saved.',
+        text: context.s.aiOffInSheet,
       );
     } else if (!hasText) {
       body = _Message(
         icon: Icons.auto_awesome_rounded,
-        text: 'No explanation yet.',
+        text: context.s.noExplanationYet,
         action: FilledButton.tonalIcon(
           onPressed: widget.onGenerate,
           icon: const Icon(Icons.auto_awesome_rounded),
@@ -339,6 +340,9 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
                 ),
                 padding: const EdgeInsets.all(3),
                 child: Image.asset(
+                  // Decorative: a text next to it says the same.
+                  excludeFromSemantics: true,
+
                   CodyArt.reading,
                   filterQuality: FilterQuality.high,
                 ),
@@ -348,7 +352,10 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Cody explains', style: theme.textTheme.titleSmall),
+                    Text(
+                      context.s.codyExplains,
+                      style: theme.textTheme.titleSmall,
+                    ),
                     Text(
                       widget.title,
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -360,7 +367,7 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
               ),
               if (hasText && !widget.loading)
                 IconButton(
-                  tooltip: _copied ? 'Copied' : 'Copy',
+                  tooltip: _copied ? context.s.copied : context.s.copy,
                   onPressed: () => _copy(text),
                   icon: Icon(
                     _copied ? Icons.check_rounded : Icons.copy_rounded,
@@ -369,7 +376,7 @@ class _ExplanationPanelState extends State<_ExplanationPanel> {
                 ),
               if (hasText && !widget.loading && widget.aiAvailable) ...[
                 IconButton(
-                  tooltip: 'Regenerate',
+                  tooltip: context.s.regenerate,
                   onPressed: widget.onGenerate,
                   icon: const Icon(Icons.refresh_rounded, size: 20),
                 ),
@@ -456,7 +463,7 @@ class _ThinkingPlaceholderState extends State<_ThinkingPlaceholder>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Cody is thinking…',
+          context.s.codyThinking,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
           ),

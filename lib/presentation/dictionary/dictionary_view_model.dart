@@ -171,9 +171,9 @@ class DictionaryViewModel extends ChangeNotifier {
       sortMode == null && query.isEmpty && !selectionMode && loadError == null;
 
   /// Why dragging is not available right now, for a hint in the UI.
-  String? get reorderBlockedReason {
-    if (query.isNotEmpty) return 'Clear the search to reorder words.';
-    if (sortMode != null) return 'Turn off sorting to reorder words.';
+  ReorderBlock? get reorderBlockedReason {
+    if (query.isNotEmpty) return ReorderBlock.search;
+    if (sortMode != null) return ReorderBlock.sort;
     return null;
   }
 
@@ -581,5 +581,8 @@ class DictionaryViewModel extends ChangeNotifier {
 }
 
 enum SortMode { alphaAsc, alphaDesc, dateAdded }
+
+/// Why the manual order cannot be changed right now.
+enum ReorderBlock { search, sort }
 
 enum ExplanationKind { short, long }

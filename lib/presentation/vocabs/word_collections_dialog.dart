@@ -4,6 +4,7 @@ import '../../domain/entities/vocabulary.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
 import '../app_scope.dart';
 import '../theme/app_tokens.dart';
+import '../l10n/app_strings.dart';
 
 /// Shows which collections a word belongs to; each checkbox saves at once.
 Future<void> showWordCollectionsDialog(
@@ -67,7 +68,7 @@ class _WordCollectionsDialogState extends State<_WordCollectionsDialog> {
       if (mounted) {
         setState(() {
           _vocabularies![i] = v; // roll back the checkbox
-          _error = 'Not saved: ${e.message}';
+          _error = context.s.notSaved(context.s.storageError(e));
         });
       }
     } finally {
@@ -88,9 +89,12 @@ class _WordCollectionsDialogState extends State<_WordCollectionsDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Vocabularies', style: theme.textTheme.headlineSmall),
               Text(
-                'Choose where "${widget.word}" belongs.',
+                context.s.navVocabularies,
+                style: theme.textTheme.headlineSmall,
+              ),
+              Text(
+                context.s.chooseWhere(widget.word),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -107,8 +111,7 @@ class _WordCollectionsDialogState extends State<_WordCollectionsDialog> {
                         child: Text(
                           vocabularies == null
                               ? ''
-                              : 'No vocabularies yet. Create one on the '
-                                    'Vocabularies tab.',
+                              : context.s.noVocabsCreateOne,
                           textAlign: TextAlign.center,
                         ),
                       )
@@ -147,7 +150,7 @@ class _WordCollectionsDialogState extends State<_WordCollectionsDialog> {
                 alignment: Alignment.centerRight,
                 child: FilledButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Done'),
+                  child: Text(context.s.done),
                 ),
               ),
             ],

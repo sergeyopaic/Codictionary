@@ -8,6 +8,7 @@ import '../widgets/empty_state.dart';
 import 'create_vocabulary_dialog.dart';
 import 'vocabs_view_model.dart';
 import 'word_picker_dialog.dart';
+import '../l10n/app_strings.dart';
 
 /// The words of one collection. Removing a word here only takes it out of
 /// the collection; it stays in the dictionary.
@@ -23,6 +24,7 @@ class VocabularyWordsView extends StatelessWidget {
 
   Future<void> _addWords(BuildContext context, Vocabulary v) async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final candidates = vm.words.where((w) => !v.contains(w.id)).toList();
     final picked = await showWordPickerDialog(
       context,
@@ -34,19 +36,20 @@ class VocabularyWordsView extends StatelessWidget {
       await vm.addWords(v.id, picked);
     } on StorageException catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Not saved: ${e.message}')),
+        SnackBar(content: Text(s.notSaved(s.storageError(e)))),
       );
     }
   }
 
   Future<void> _remove(BuildContext context, WordEntity word) async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     Future<void> set(bool member) async {
       try {
         await vm.setMembership(vocabularyId, word.id, member: member);
       } on StorageException catch (e) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Not saved: ${e.message}')),
+          SnackBar(content: Text(s.notSaved(s.storageError(e)))),
         );
         rethrow;
       }
@@ -59,9 +62,9 @@ class VocabularyWordsView extends StatelessWidget {
     }
     messenger.showSnackBar(
       SnackBar(
-        content: Text('"${word.source}" removed from the collection.'),
+        content: Text(s.removedFromVocab(word.source)),
         action: SnackBarAction(
-          label: 'Undo',
+          label: s.undo,
           onPressed: () => set(true).catchError((_) {}),
         ),
       ),
@@ -78,10 +81,10 @@ class VocabularyWordsView extends StatelessWidget {
           // Deleted meanwhile.
           return Scaffold(
             appBar: AppBar(),
-            body: const EmptyState(
+            body: EmptyState(
               image: CodyArt.reading,
-              title: 'This vocabulary no longer exists',
-              message: 'It was deleted.',
+              title: context.s.vocabGoneTitle,
+              message: context.s.vocabGoneMessage,
             ),
           );
         }
@@ -95,6 +98,9 @@ class VocabularyWordsView extends StatelessWidget {
                 SizedBox.square(
                   dimension: 32,
                   child: Image.asset(
+                    // Decorative: a text next to it says the same.
+                    excludeFromSemantics: true,
+
                     vocabIconHiRes(v.iconPath),
                     filterQuality: FilterQuality.high,
                     errorBuilder: (_, _, _) =>
@@ -127,7 +133,7 @@ class VocabularyWordsView extends StatelessWidget {
                     ),
                     child: Text(
                       [
-                        words.length == 1 ? '1 word' : '${words.length} words',
+                        context.s.wordCount(words.length),
                         if (v.description.isNotEmpty) v.description,
                       ].join(' · '),
                       style: theme.textTheme.bodyMedium?.copyWith(
@@ -139,14 +145,12 @@ class VocabularyWordsView extends StatelessWidget {
                     child: words.isEmpty
                         ? EmptyState(
                             image: CodyArt.reading,
-                            title: 'No words here yet',
-                            message:
-                                'Add words from your dictionary. A word can '
-                                'be in several vocabularies.',
+                            title: context.s.noWordsHereTitle,
+                            message: context.s.noWordsHereMessage,
                             action: FilledButton.icon(
                               onPressed: () => _addWords(context, v),
                               icon: const Icon(Icons.playlist_add_rounded),
-                              label: const Text('Add words'),
+                              label: Text(context.s.addWords),
                             ),
                           )
                         : ListView.separated(
@@ -172,7 +176,7 @@ class VocabularyWordsView extends StatelessWidget {
                                     style: TextStyle(color: scheme.secondary),
                                   ),
                                   trailing: IconButton(
-                                    tooltip: 'Remove from vocabulary',
+                                    tooltip: context.s.removeFromVocab,
                                     icon: const Icon(
                                       Icons.remove_circle_outline_rounded,
                                     ),
@@ -195,7 +199,7 @@ class VocabularyWordsView extends StatelessWidget {
                   heroTag: null,
                   onPressed: () => _addWords(context, v),
                   icon: const Icon(Icons.playlist_add_rounded),
-                  label: const Text('Add words'),
+                  label: Text(context.s.addWords),
                 ),
         );
       },

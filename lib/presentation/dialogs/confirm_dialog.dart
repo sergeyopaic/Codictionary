@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
+import '../l10n/app_strings.dart';
 
 /// Centered confirmation dialog with a Cody illustration.
 /// Returns true if the user confirms, false otherwise.
@@ -8,7 +9,7 @@ Future<bool> showConfirmDialog(
   BuildContext context, {
   required String title,
   required String message,
-  String confirmLabel = 'Delete',
+  String? confirmLabel,
   IconData confirmIcon = Icons.delete_outline_rounded,
   String image = CodyArt.delete,
   bool destructive = true,
@@ -19,7 +20,7 @@ Future<bool> showConfirmDialog(
         builder: (context) => _ConfirmDialog(
           title: title,
           message: message,
-          confirmLabel: confirmLabel,
+          confirmLabel: confirmLabel ?? context.s.delete,
           confirmIcon: confirmIcon,
           image: image,
           destructive: destructive,
@@ -68,7 +69,12 @@ class _ConfirmDialog extends StatelessWidget {
                   color: accent.withValues(alpha: 0.6),
                 ),
                 padding: const EdgeInsets.all(AppSpacing.md),
-                child: Image.asset(image, filterQuality: FilterQuality.high),
+                child: Image.asset(
+                  // Decorative: a text next to it says the same.
+                  excludeFromSemantics: true,
+                  image,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
               const SizedBox(height: AppSpacing.lg),
               Text(
@@ -90,7 +96,7 @@ class _ConfirmDialog extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(false),
-                      child: const Text('Cancel'),
+                      child: Text(context.s.cancel),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),

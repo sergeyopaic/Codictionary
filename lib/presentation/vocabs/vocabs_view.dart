@@ -10,6 +10,7 @@ import '../widgets/page_header.dart';
 import 'create_vocabulary_dialog.dart';
 import 'vocabs_view_model.dart';
 import 'vocabulary_words_view.dart';
+import '../l10n/app_strings.dart';
 
 class VocabsView extends StatefulWidget {
   const VocabsView({super.key, this.isActive = true});
@@ -45,16 +46,21 @@ class _VocabsViewState extends State<VocabsView> {
   }
 
   void _notSaved(ScaffoldMessengerState messenger, StorageException e) {
-    messenger.showSnackBar(SnackBar(content: Text('Not saved: ${e.message}')));
+    // The messenger outlives await gaps; take the strings from it.
+    final s = messenger.context.s;
+    messenger.showSnackBar(
+      SnackBar(content: Text(s.notSaved(s.storageError(e)))),
+    );
   }
 
   Future<void> _create() async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final res = await showCreateVocabularyDialog(context);
     if (res == null) return;
     try {
       await vm.create(
-        name: _name(res),
+        name: _name(res, s),
         description: res['description'] ?? '',
         iconPath: res['icon'] ?? vocabIconPath(1),
       );
@@ -65,6 +71,7 @@ class _VocabsViewState extends State<VocabsView> {
 
   Future<void> _edit(Vocabulary v) async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final res = await showCreateVocabularyDialog(
       context,
       initialName: v.name,
@@ -75,7 +82,7 @@ class _VocabsViewState extends State<VocabsView> {
     try {
       await vm.updateDetails(
         v.copyWith(
-          name: _name(res),
+          name: _name(res, s),
           description: res['description'] ?? '',
           iconPath: res['icon'] ?? v.iconPath,
         ),
@@ -87,14 +94,12 @@ class _VocabsViewState extends State<VocabsView> {
 
   Future<void> _delete(Vocabulary v) async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final count = vm.wordsOf(v).length;
     final ok = await showConfirmDialog(
       context,
-      title: 'Delete vocabulary?',
-      message: count == 0
-          ? '"${v.name}" will be removed.'
-          : '"${v.name}" will be removed. Its $count '
-                '${count == 1 ? 'word stays' : 'words stay'} in your dictionary.',
+      title: s.deleteVocabTitle,
+      message: s.deleteVocabMessage(v.name, count),
     );
     if (!ok) return;
     final ({Vocabulary vocabulary, int index})? deleted;
@@ -108,9 +113,9 @@ class _VocabsViewState extends State<VocabsView> {
     final undo = deleted;
     messenger.showSnackBar(
       SnackBar(
-        content: Text('"${v.name}" deleted.'),
+        content: Text(s.vocabDeleted(v.name)),
         action: SnackBarAction(
-          label: 'Undo',
+          label: s.undo,
           onPressed: () async {
             try {
               await vm.restore(undo.vocabulary, undo.index);
@@ -131,8 +136,8 @@ class _VocabsViewState extends State<VocabsView> {
     );
   }
 
-  static String _name(Map<String, String> res) =>
-      (res['name'] ?? '').isEmpty ? 'Untitled' : res['name']!;
+  static String _name(Map<String, String> res, AppStrings s) =>
+      (res['name'] ?? '').isEmpty ? s.untitled : res['name']!;
 
   @override
   Widget build(BuildContext context) {
@@ -166,15 +171,15 @@ class _VocabsViewState extends State<VocabsView> {
                 Padding(
                   padding: EdgeInsets.fromLTRB(pad, pad, pad, AppSpacing.xl),
                   child: PageHeader(
-                    title: 'Vocabularies',
+                    title: context.s.navVocabularies,
                     subtitle: count == 0
-                        ? 'Organize words into themed collections'
-                        : '$count ${count == 1 ? 'collection' : 'collections'}',
+                        ? context.s.vocabsSubtitleEmpty
+                        : context.s.collectionCount(count),
                     trailing: headerButton && canEdit
                         ? FilledButton.icon(
                             onPressed: _create,
                             icon: const Icon(Icons.add_rounded),
-                            label: const Text('New vocabulary'),
+                            label: Text(context.s.newVocabulary),
                           )
                         : null,
                   ),
@@ -192,7 +197,7 @@ class _VocabsViewState extends State<VocabsView> {
               // without distinct tags opening a page crashes the hero animation.
               heroTag: null,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('New vocabulary'),
+              label: Text(context.s.newVocabulary),
               onPressed: _create,
             ),
     );
@@ -204,26 +209,24 @@ class _VocabsViewState extends State<VocabsView> {
     if (loadError != null) {
       return EmptyState(
         image: CodyArt.delete,
-        title: "Can't open your vocabularies",
-        message: '${loadError.message} Nothing was changed.',
+        title: context.s.cantOpenVocabs,
+        message: context.s.nothingChanged(context.s.storageError(loadError)),
         action: FilledButton.icon(
           onPressed: vm.load,
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Try again'),
+          label: Text(context.s.tryAgain),
         ),
       );
     }
     if (vm.vocabularies.isEmpty) {
       return EmptyState(
         image: CodyArt.reading,
-        title: 'No vocabularies yet',
-        message:
-            'Create collections like "Travel" or "Work" to keep related '
-            'words together.',
+        title: context.s.noVocabsTitle,
+        message: context.s.noVocabsMessage,
         action: FilledButton.icon(
           onPressed: _create,
           icon: const Icon(Icons.add_rounded),
-          label: const Text('Create a vocabulary'),
+          label: Text(context.s.createVocab),
         ),
       );
     }
@@ -296,6 +299,9 @@ class _VocabCard extends StatelessWidget {
                 ),
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Image.asset(
+                  // Decorative: a text next to it says the same.
+                  excludeFromSemantics: true,
+
                   vocabIconHiRes(vocab.iconPath),
                   filterQuality: FilterQuality.high,
                   errorBuilder: (_, _, _) => Icon(
@@ -319,7 +325,7 @@ class _VocabCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      wordCount == 1 ? '1 word' : '$wordCount words',
+                      context.s.wordCount(wordCount),
                       style: theme.textTheme.labelMedium?.copyWith(
                         color: scheme.primary,
                         fontWeight: FontWeight.w700,
@@ -328,7 +334,7 @@ class _VocabCard extends StatelessWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       vocab.description.isEmpty
-                          ? 'No description'
+                          ? context.s.noDescription
                           : vocab.description,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -348,7 +354,7 @@ class _VocabCard extends StatelessWidget {
                   MenuItemButton(
                     leadingIcon: const Icon(Icons.edit_outlined),
                     onPressed: onEdit,
-                    child: const Text('Edit'),
+                    child: Text(context.s.edit),
                   ),
                   MenuItemButton(
                     leadingIcon: Icon(
@@ -357,13 +363,13 @@ class _VocabCard extends StatelessWidget {
                     ),
                     onPressed: onDelete,
                     child: Text(
-                      'Delete',
+                      context.s.delete,
                       style: TextStyle(color: scheme.error),
                     ),
                   ),
                 ],
                 builder: (context, controller, _) => IconButton(
-                  tooltip: 'Options',
+                  tooltip: context.s.options,
                   icon: const Icon(Icons.more_vert_rounded),
                   onPressed: () => controller.isOpen
                       ? controller.close()

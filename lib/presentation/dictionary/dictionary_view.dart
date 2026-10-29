@@ -22,6 +22,7 @@ import 'widgets/storage_error_view.dart';
 import 'widgets/word_card.dart';
 import 'widgets/word_details_sheet.dart';
 import 'widgets/word_editor_dialog.dart';
+import '../l10n/app_strings.dart';
 
 class DictionaryView extends StatefulWidget {
   const DictionaryView({super.key, this.dataGeneration = 0});
@@ -103,13 +104,15 @@ class _DictionaryViewState extends State<DictionaryView> {
   Future<void> _editWord(String id) async {
     if (vm.wordById(id) == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final saved = await showWordEditorDialog(context, vm: vm, wordId: id);
     if (!saved) return;
-    messenger.showSnackBar(const SnackBar(content: Text('Word updated.')));
+    messenger.showSnackBar(SnackBar(content: Text(s.wordUpdated)));
   }
 
   Future<void> _deleteWord(WordEntity word) async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final ok = await showConfirmDeleteDialog(context, word.source);
     if (!ok) return;
     try {
@@ -120,9 +123,9 @@ class _DictionaryViewState extends State<DictionaryView> {
     }
     messenger.showSnackBar(
       SnackBar(
-        content: Text('"${word.source}" deleted.'),
+        content: Text(s.wordDeleted(word.source)),
         action: SnackBarAction(
-          label: 'Undo',
+          label: s.undo,
           onPressed: () => _guard(messenger, () => vm.restoreWord(word)),
         ),
       ),
@@ -133,7 +136,10 @@ class _DictionaryViewState extends State<DictionaryView> {
   void _showStorageError(ScaffoldMessengerState messenger, StorageException e) {
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Not saved: ${e.message}'),
+        // The messenger outlives await gaps; take the strings from it.
+        content: Text(
+          messenger.context.s.notSaved(messenger.context.s.storageError(e)),
+        ),
         duration: const Duration(seconds: 6),
       ),
     );
@@ -152,6 +158,7 @@ class _DictionaryViewState extends State<DictionaryView> {
 
   Future<void> _deleteSelected() async {
     final messenger = ScaffoldMessenger.of(context);
+    final s = context.s;
     final ok = await showConfirmBulkDeleteDialog(context, vm.selectedCount);
     if (!ok) return;
     // Capture removed words before deletion for undo
@@ -175,13 +182,9 @@ class _DictionaryViewState extends State<DictionaryView> {
     vm.toggleSelectionMode(false);
     messenger.showSnackBar(
       SnackBar(
-        content: Text(
-          deleted.length == 1
-              ? '1 word deleted.'
-              : '${deleted.length} words deleted.',
-        ),
+        content: Text(s.wordsDeleted(deleted.length)),
         action: SnackBarAction(
-          label: 'Undo',
+          label: s.undo,
           onPressed: () => _guard(messenger, () => vm.restoreWords(deleted)),
         ),
       ),
@@ -201,7 +204,11 @@ class _DictionaryViewState extends State<DictionaryView> {
   /// Long-press on a card when dragging is not possible: say why instead of
   /// silently doing nothing.
   void _explainReorderBlocked() {
-    final reason = vm.reorderBlockedReason;
+    final reason = switch (vm.reorderBlockedReason) {
+      ReorderBlock.search => context.s.reorderBlockedSearch,
+      ReorderBlock.sort => context.s.reorderBlockedSort,
+      null => null,
+    };
     if (reason == null) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -215,9 +222,16 @@ class _DictionaryViewState extends State<DictionaryView> {
   Widget build(BuildContext context) {
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true): _addWord,
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
-            _searchFocus.requestFocus,
+        SingleActivator(
+          LogicalKeyboardKey.keyN,
+          control: !AppStrings.isApple,
+          meta: AppStrings.isApple,
+        ): _addWord,
+        SingleActivator(
+          LogicalKeyboardKey.keyF,
+          control: !AppStrings.isApple,
+          meta: AppStrings.isApple,
+        ): _searchFocus.requestFocus,
         const SingleActivator(LogicalKeyboardKey.escape): () {
           if (vm.selectionMode) vm.toggleSelectionMode(false);
         },
@@ -329,12 +343,12 @@ class _DictionaryViewState extends State<DictionaryView> {
                 // Tabs stay alive in an IndexedStack, so several FABs coexist;
                 // without distinct tags opening a page crashes the hero animation.
                 heroTag: null,
-                tooltip: 'Add word (Ctrl+N)',
+                tooltip: context.s.addWordTooltip(context.s.shortcut('N')),
                 onPressed: vm.selectionMode || vm.loadError != null
                     ? null
                     : _addWord,
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Add word'),
+                label: Text(context.s.addWord),
               ),
             ),
     );
@@ -343,23 +357,28 @@ class _DictionaryViewState extends State<DictionaryView> {
   Widget _buildToolbar(BuildContext context, bool wide) {
     final search = ListenableBuilder(
       listenable: _search,
-      builder: (context, _) => SearchBar(
-        controller: _search,
-        focusNode: _searchFocus,
-        hintText: wide
-            ? 'Search words or translations  (Ctrl+F)'
-            : 'Search words',
-        leading: const Icon(Icons.search_rounded),
-        trailing: [
-          if (_search.text.isNotEmpty)
-            IconButton(
-              tooltip: 'Clear',
-              onPressed: _search.clear,
-              icon: const Icon(Icons.close_rounded),
-            ),
-          if (!wide) _SortMenu(value: vm.sortMode, onChanged: vm.setSort),
-          if (!wide) _selectButton(),
-        ],
+      // Mark the tappable search bar as a text field; its hint is already
+      // read out as the label, so no extra label (it would be read twice).
+      builder: (context, _) => Semantics(
+        textField: true,
+        child: SearchBar(
+          controller: _search,
+          focusNode: _searchFocus,
+          hintText: wide
+              ? context.s.searchHintLong(context.s.shortcut('F'))
+              : context.s.searchHintShort,
+          leading: const Icon(Icons.search_rounded),
+          trailing: [
+            if (_search.text.isNotEmpty)
+              IconButton(
+                tooltip: context.s.clear,
+                onPressed: _search.clear,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            if (!wide) _SortMenu(value: vm.sortMode, onChanged: vm.setSort),
+            if (!wide) _selectButton(),
+          ],
+        ),
       ),
     );
 
@@ -375,24 +394,24 @@ class _DictionaryViewState extends State<DictionaryView> {
           style: const ButtonStyle(
             minimumSize: WidgetStatePropertyAll(Size(0, 52)),
           ),
-          segments: const [
+          segments: [
             ButtonSegment(
               value: SortMode.alphaAsc,
               icon: Icon(Icons.arrow_downward_rounded, size: 18),
-              label: Text('A–Z'),
-              tooltip: 'Sort A to Z',
+              label: Text(context.s.sortAZ),
+              tooltip: context.s.sortAZTooltip,
             ),
             ButtonSegment(
               value: SortMode.alphaDesc,
               icon: Icon(Icons.arrow_upward_rounded, size: 18),
-              label: Text('Z–A'),
-              tooltip: 'Sort Z to A',
+              label: Text(context.s.sortZA),
+              tooltip: context.s.sortZATooltip,
             ),
             ButtonSegment(
               value: SortMode.dateAdded,
               icon: Icon(Icons.schedule_rounded, size: 18),
-              label: Text('Recent'),
-              tooltip: 'Newest first',
+              label: Text(context.s.sortRecent),
+              tooltip: context.s.sortRecentTooltip,
             ),
           ],
           selected: {?vm.sortMode},
@@ -409,7 +428,7 @@ class _DictionaryViewState extends State<DictionaryView> {
           ),
           onPressed: vm.selectionMode || vm.loadError != null ? null : _addWord,
           icon: const Icon(Icons.add_rounded),
-          label: const Text('Add word'),
+          label: Text(context.s.addWord),
         ),
       ],
     );
@@ -417,7 +436,9 @@ class _DictionaryViewState extends State<DictionaryView> {
 
   Widget _selectButton() {
     return IconButton(
-      tooltip: vm.selectionMode ? 'Done selecting' : 'Select words',
+      tooltip: vm.selectionMode
+          ? context.s.doneSelecting
+          : context.s.selectWords,
       isSelected: vm.selectionMode,
       onPressed: vm.words.isEmpty
           ? null
@@ -441,21 +462,11 @@ class _DictionaryViewState extends State<DictionaryView> {
     if (vm.words.isEmpty) {
       return EmptyState(
         image: CodyArt.standing,
-        title: 'Your dictionary is empty',
-        message: switch ((vm.translationAvailable, vm.aiAvailable)) {
-          (true, true) =>
-            'Add your first word — Cody will translate it and explain how '
-                'it\'s used. Or start with a few examples.',
-          (true, false) =>
-            'Add your first word — Cody will translate it. Or start with a '
-                'few examples.',
-          (false, true) =>
-            'Add your first word with its translation — Cody will explain '
-                'how it\'s used. Or start with a few examples.',
-          (false, false) =>
-            'Add your first word with its translation, or start with a few '
-                'examples.',
-        },
+        title: context.s.emptyTitle,
+        message: context.s.emptyMessage(
+          translation: vm.translationAvailable,
+          ai: vm.aiAvailable,
+        ),
         action: Wrap(
           alignment: WrapAlignment.center,
           spacing: AppSpacing.sm,
@@ -464,12 +475,12 @@ class _DictionaryViewState extends State<DictionaryView> {
             FilledButton.icon(
               onPressed: _addWord,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add your first word'),
+              label: Text(context.s.addFirstWord),
             ),
             OutlinedButton.icon(
               onPressed: _addExamples,
               icon: const Icon(Icons.auto_awesome_outlined),
-              label: const Text('Add example words'),
+              label: Text(context.s.addExamples),
             ),
           ],
         ),
@@ -479,14 +490,12 @@ class _DictionaryViewState extends State<DictionaryView> {
       final q = _search.text.trim();
       return EmptyState(
         image: CodyArt.reading,
-        title: 'No matches',
-        message:
-            'Nothing found for "$q". Try another spelling or add it as a '
-            'new word.',
+        title: context.s.noMatchesTitle,
+        message: context.s.noMatchesMessage(q),
         action: FilledButton.tonalIcon(
           onPressed: () => _addWord(initialEng: q),
           icon: const Icon(Icons.add_rounded),
-          label: Text('Add "$q"'),
+          label: Text(context.s.addQuery(q)),
         ),
       );
     }
@@ -611,12 +620,24 @@ class _SortMenu extends StatelessWidget {
 
     return MenuAnchor(
       menuChildren: [
-        item(SortMode.alphaAsc, Icons.arrow_downward_rounded, 'A to Z'),
-        item(SortMode.alphaDesc, Icons.arrow_upward_rounded, 'Z to A'),
-        item(SortMode.dateAdded, Icons.schedule_rounded, 'Newest first'),
+        item(
+          SortMode.alphaAsc,
+          Icons.arrow_downward_rounded,
+          context.s.sortMenuAZ,
+        ),
+        item(
+          SortMode.alphaDesc,
+          Icons.arrow_upward_rounded,
+          context.s.sortMenuZA,
+        ),
+        item(
+          SortMode.dateAdded,
+          Icons.schedule_rounded,
+          context.s.sortRecentTooltip,
+        ),
       ],
       builder: (context, controller, _) => IconButton(
-        tooltip: 'Sort',
+        tooltip: context.s.sortTooltip,
         isSelected: value != null,
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),

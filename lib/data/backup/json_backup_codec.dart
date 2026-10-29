@@ -65,46 +65,41 @@ class JsonBackupCodec implements BackupCodec {
     try {
       json = jsonDecode(text);
     } on FormatException {
-      throw const BackupFormatException(
-        'The text is not valid JSON. Copy the whole backup and try again.',
-      );
+      throw const BackupFormatException(BackupProblem.notJson);
     }
     if (json is! Map || json['format'] != format) {
-      throw const BackupFormatException('This is not a Codictionary backup.');
+      throw const BackupFormatException(BackupProblem.notBackup);
     }
     final v = json['version'];
     if (v is! int || v < 1) {
-      throw const BackupFormatException('The backup has no valid version.');
+      throw const BackupFormatException(BackupProblem.noVersion);
     }
     if (v > version) {
-      throw BackupFormatException(
-        'This backup was made by a newer version of Codictionary '
-        '(format $v). Update the app to restore it.',
-      );
+      throw BackupFormatException(BackupProblem.newerVersion, value: '$v');
     }
 
     final words = <WordEntity>[];
     final wordIds = <String>{};
     final sources = <String>{};
     for (final (i, item) in _list(json, 'words').indexed) {
-      final where = 'word ${i + 1}';
-      final m = _map(item, where);
-      final id = _requiredString(m, 'id', where);
-      final source = _requiredString(m, 'source', where);
+      final at = _At('word', i + 1);
+      final m = _map(item, at);
+      final id = _requiredString(m, 'id', at);
+      final source = _requiredString(m, 'source', at);
       if (!wordIds.add(id)) {
-        throw BackupFormatException('Duplicate word id "$id".');
+        throw BackupFormatException(BackupProblem.duplicateWordId, value: id);
       }
       if (!sources.add(source.trim().toLowerCase())) {
-        throw BackupFormatException('"$source" appears twice.');
+        throw BackupFormatException(BackupProblem.duplicateWord, value: source);
       }
       words.add(
         WordEntity(
           id: id,
           source: source,
-          target: _string(m, 'target', where),
-          shortExplanation: _optionalString(m, 'shortExplanation', where),
-          longExplanation: _optionalString(m, 'longExplanation', where),
-          createdAt: _date(m, 'createdAt', where),
+          target: _string(m, 'target', at),
+          shortExplanation: _optionalString(m, 'shortExplanation', at),
+          longExplanation: _optionalString(m, 'longExplanation', at),
+          createdAt: _date(m, 'createdAt', at),
         ),
       );
     }
@@ -112,33 +107,33 @@ class JsonBackupCodec implements BackupCodec {
     final vocabularies = <Vocabulary>[];
     final vocabularyIds = <String>{};
     for (final (i, item) in _list(json, 'vocabularies').indexed) {
-      final where = 'vocabulary ${i + 1}';
-      final m = _map(item, where);
-      final id = _requiredString(m, 'id', where);
+      final at = _At('vocabulary', i + 1);
+      final m = _map(item, at);
+      final id = _requiredString(m, 'id', at);
       if (!vocabularyIds.add(id)) {
-        throw BackupFormatException('Duplicate vocabulary id "$id".');
+        throw BackupFormatException(
+          BackupProblem.duplicateVocabularyId,
+          value: id,
+        );
       }
       final members = m['wordIds'];
       if (members is! List || members.any((e) => e is! String)) {
-        throw BackupFormatException('$where: "wordIds" must be a list of ids.');
+        throw at.error(BackupProblem.membersNotList);
       }
       final memberIds = List<String>.from(members);
       if (memberIds.toSet().length != memberIds.length) {
-        throw BackupFormatException('$where lists a word twice.');
+        throw at.error(BackupProblem.memberTwice);
       }
       final unknown = memberIds.where((id) => !wordIds.contains(id));
       if (unknown.isNotEmpty) {
-        throw BackupFormatException(
-          '$where refers to a word that is not in the backup '
-          '("${unknown.first}").',
-        );
+        throw at.error(BackupProblem.unknownMember, value: unknown.first);
       }
       vocabularies.add(
         Vocabulary(
           id: id,
-          name: _string(m, 'name', where),
-          description: _string(m, 'description', where),
-          iconPath: _string(m, 'icon', where),
+          name: _string(m, 'name', at),
+          description: _string(m, 'description', at),
+          iconPath: _string(m, 'icon', at),
           wordIds: memberIds,
         ),
       );
@@ -147,55 +142,64 @@ class JsonBackupCodec implements BackupCodec {
     return DictionarySnapshot(
       words: words,
       vocabularies: vocabularies,
-      createdAt: _date(json, 'createdAt', 'the backup'),
+      createdAt: _date(json, 'createdAt', const _At('backup', null)),
     );
   }
 
   static List<Object?> _list(Map<dynamic, dynamic> m, String key) {
     final v = m[key];
-    if (v is! List) throw BackupFormatException('"$key" is missing.');
-    return v;
-  }
-
-  static Map<dynamic, dynamic> _map(Object? v, String where) {
-    if (v is! Map) throw BackupFormatException('$where is not an object.');
-    return v;
-  }
-
-  static String _string(Map<dynamic, dynamic> m, String key, String where) {
-    final v = m[key];
-    if (v is! String) throw BackupFormatException('$where: "$key" is missing.');
-    return v;
-  }
-
-  static String _requiredString(
-    Map<dynamic, dynamic> m,
-    String key,
-    String where,
-  ) {
-    final v = _string(m, key, where);
-    if (v.trim().isEmpty) {
-      throw BackupFormatException('$where: "$key" is empty.');
+    if (v is! List) {
+      throw BackupFormatException(BackupProblem.missingList, field: key);
     }
     return v;
   }
 
-  static String? _optionalString(
-    Map<dynamic, dynamic> m,
-    String key,
-    String where,
-  ) {
+  static Map<dynamic, dynamic> _map(Object? v, _At at) {
+    if (v is! Map) throw at.error(BackupProblem.notObject);
+    return v;
+  }
+
+  static String _string(Map<dynamic, dynamic> m, String key, _At at) {
+    final v = m[key];
+    if (v is! String) throw at.error(BackupProblem.missingField, field: key);
+    return v;
+  }
+
+  static String _requiredString(Map<dynamic, dynamic> m, String key, _At at) {
+    final v = _string(m, key, at);
+    if (v.trim().isEmpty) throw at.error(BackupProblem.emptyField, field: key);
+    return v;
+  }
+
+  static String? _optionalString(Map<dynamic, dynamic> m, String key, _At at) {
     final v = m[key];
     if (v == null || v is String) return v as String?;
-    throw BackupFormatException('$where: "$key" must be text.');
+    throw at.error(BackupProblem.notText, field: key);
   }
 
-  static DateTime _date(Map<dynamic, dynamic> m, String key, String where) {
+  static DateTime _date(Map<dynamic, dynamic> m, String key, _At at) {
     final v = m[key];
     final parsed = v is String ? DateTime.tryParse(v) : null;
-    if (parsed == null) {
-      throw BackupFormatException('$where: "$key" is not a date.');
-    }
+    if (parsed == null) throw at.error(BackupProblem.notDate, field: key);
     return parsed;
   }
+}
+
+/// Where in the backup a problem is (for the error message).
+class _At {
+  const _At(this.item, this.index);
+  final String item;
+  final int? index;
+
+  BackupFormatException error(
+    BackupProblem problem, {
+    String? field,
+    String? value,
+  }) => BackupFormatException(
+    problem,
+    item: item,
+    index: index,
+    field: field,
+    value: value,
+  );
 }

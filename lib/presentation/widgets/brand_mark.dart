@@ -74,6 +74,9 @@ class CodyAvatar extends StatelessWidget {
             width: imageWidth,
             height: imageHeight,
             child: Image.asset(
+              // Decorative: a text next to it says the same.
+              excludeFromSemantics: true,
+
               CodyArt.standing,
               fit: BoxFit.fill,
               filterQuality: FilterQuality.high,

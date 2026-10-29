@@ -22,12 +22,6 @@ class ThemeController extends ValueNotifier<ThemeMode> {
     ThemeMode.dark => Icons.dark_mode_rounded,
   };
 
-  String get label => switch (value) {
-    ThemeMode.system => 'Theme: follows the system',
-    ThemeMode.light => 'Theme: light',
-    ThemeMode.dark => 'Theme: dark',
-  };
-
   static ThemeMode fromPreference(ThemePreference p) => switch (p) {
     ThemePreference.system => ThemeMode.system,
     ThemePreference.light => ThemeMode.light,

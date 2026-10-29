@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/app_strings.dart';
 
 /// Overflow menu (three dots) for card actions: explain, edit, delete.
 class WordCardMenu extends StatelessWidget {
@@ -24,28 +25,28 @@ class WordCardMenu extends StatelessWidget {
         MenuItemButton(
           leadingIcon: Icon(Icons.auto_awesome_rounded, color: scheme.tertiary),
           onPressed: onExplain,
-          child: const Text('Explain'),
+          child: Text(context.s.explain),
         ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.edit_outlined),
           onPressed: onEdit,
-          child: const Text('Edit word'),
+          child: Text(context.s.editWord),
         ),
         if (onCollections != null)
           MenuItemButton(
             leadingIcon: const Icon(Icons.collections_bookmark_outlined),
             onPressed: onCollections,
-            child: const Text('Vocabularies…'),
+            child: Text(context.s.vocabulariesMenu),
           ),
         const Divider(height: 9),
         MenuItemButton(
           leadingIcon: Icon(Icons.delete_outline_rounded, color: scheme.error),
           onPressed: onDelete,
-          child: Text('Delete', style: TextStyle(color: scheme.error)),
+          child: Text(context.s.delete, style: TextStyle(color: scheme.error)),
         ),
       ],
       builder: (context, controller, _) => IconButton(
-        tooltip: 'More options',
+        tooltip: context.s.moreOptions,
         visualDensity: VisualDensity.compact,
         icon: const Icon(Icons.more_horiz_rounded),
         onPressed: () =>

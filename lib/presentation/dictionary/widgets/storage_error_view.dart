@@ -4,6 +4,7 @@ import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../dialogs/confirm_dialog.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/empty_state.dart';
+import '../../l10n/app_strings.dart';
 
 /// Shown instead of the dictionary when stored words could not be loaded.
 /// Offers only actions that keep the damaged data.
@@ -35,7 +36,7 @@ class _StorageErrorViewState extends State<StorageErrorView> {
     try {
       await action();
     } on StorageException catch (e) {
-      _actionError = e.message;
+      if (mounted) _actionError = context.s.storageError(e);
     }
     if (mounted) setState(() => _busy = false);
   }
@@ -43,11 +44,9 @@ class _StorageErrorViewState extends State<StorageErrorView> {
   Future<void> _startEmpty() async {
     final ok = await showConfirmDialog(
       context,
-      title: 'Start with an empty dictionary?',
-      message:
-          'The damaged data is kept in a separate copy next to your '
-          'dictionary, so nothing is deleted.',
-      confirmLabel: 'Start empty',
+      title: context.s.startEmptyTitle,
+      message: context.s.startEmptyMessage,
+      confirmLabel: context.s.startEmpty,
       confirmIcon: Icons.restart_alt_rounded,
       destructive: false,
     );
@@ -57,24 +56,21 @@ class _StorageErrorViewState extends State<StorageErrorView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = context.s;
     final error = widget.error;
     final corrupted = error is StorageCorruptedException ? error : null;
 
     final String title;
     final String message;
     if (corrupted == null) {
-      title = 'Can\'t open your dictionary';
-      message = '${error.message} Your words were not changed.';
+      title = s.cantOpenDictionary;
+      message = s.wordsNotChanged(s.storageError(error));
     } else if (corrupted.hasBackup) {
-      title = 'Your dictionary file is damaged';
-      message =
-          '${error.message} You can restore the last good copy. The damaged '
-          'data is kept aside, nothing is deleted.';
+      title = s.dictionaryDamaged;
+      message = s.damagedWithBackup(s.storageError(error));
     } else {
-      title = 'Your dictionary file is damaged';
-      message =
-          '${error.message} No backup is available. The damaged data has '
-          'not been changed.';
+      title = s.dictionaryDamaged;
+      message = s.damagedNoBackup(s.storageError(error));
     }
 
     final actions = <Widget>[
@@ -85,25 +81,25 @@ class _StorageErrorViewState extends State<StorageErrorView> {
               : () =>
                     _run(() => widget.onRecover(StorageRecovery.restoreBackup)),
           icon: const Icon(Icons.history_rounded),
-          label: const Text('Restore last good copy'),
+          label: Text(s.restoreLastGood),
         ),
       if (corrupted != null)
         OutlinedButton.icon(
           onPressed: _busy ? null : _startEmpty,
           icon: const Icon(Icons.restart_alt_rounded),
-          label: const Text('Start empty'),
+          label: Text(s.startEmpty),
         ),
       if (corrupted == null)
         FilledButton.icon(
           onPressed: _busy ? null : () => _run(widget.onRetry),
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Try again'),
+          label: Text(s.tryAgain),
         )
       else if (!corrupted.hasBackup)
         OutlinedButton.icon(
           onPressed: _busy ? null : () => _run(widget.onRetry),
           icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Try again'),
+          label: Text(s.tryAgain),
         ),
     ];
 

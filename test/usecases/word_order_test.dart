@@ -65,7 +65,7 @@ void main() {
     vm.onQueryChanged('ap');
 
     expect(vm.canReorder, isFalse);
-    expect(vm.reorderBlockedReason, contains('search'));
+    expect(vm.reorderBlockedReason, ReorderBlock.search);
     await vm.reorder(0, 0);
 
     vm.onQueryChanged('');
@@ -99,7 +99,7 @@ void main() {
     vm.setSort(SortMode.alphaDesc);
 
     expect(vm.canReorder, isFalse);
-    expect(vm.reorderBlockedReason, contains('sorting'));
+    expect(vm.reorderBlockedReason, ReorderBlock.sort);
     await vm.reorder(0, 2);
     expect(manual(vm), ['pear', 'apple', 'mango']);
   });

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/entities/word_entity.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/failure_text.dart';
 import '../../widgets/word_card_menu.dart';
+import '../../l10n/app_strings.dart';
 
 /// A single dictionary entry in the grid.
 class WordCard extends StatefulWidget {
@@ -63,86 +63,92 @@ class _WordCardState extends State<WordCard> {
         ? scheme.primary.withValues(alpha: 0.4)
         : scheme.outlineVariant;
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: AppMotion.medium,
-        curve: AppMotion.emphasized,
-        transform: Matrix4.translationValues(0, lifted ? -3 : 0, 0),
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primaryContainer.withValues(alpha: 0.45)
-              : scheme.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: borderColor, width: selected ? 2 : 1),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.shadow.withValues(alpha: lifted ? 0.10 : 0.03),
-              blurRadius: lifted ? 24 : 8,
-              offset: Offset(0, lifted ? 10 : 2),
-            ),
-          ],
-        ),
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
+    // In selection mode screen readers announce whether the card is picked.
+    return Semantics(
+      selected: widget.selectionMode ? widget.selected : null,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: AppMotion.medium,
+          curve: AppMotion.emphasized,
+          transform: Matrix4.translationValues(0, lifted ? -3 : 0, 0),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primaryContainer.withValues(alpha: 0.45)
+                : scheme.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            onTap: widget.selectionMode ? widget.onToggleSelect : widget.onTap,
-            onLongPress: widget.onLongPress,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg + 2,
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.lg,
+            border: Border.all(color: borderColor, width: selected ? 2 : 1),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.shadow.withValues(alpha: lifted ? 0.10 : 0.03),
+                blurRadius: lifted ? 24 : 8,
+                offset: Offset(0, lifted ? 10 : 2),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        // Long phrases get two lines in a smaller size
-                        // instead of being cut after a few words.
-                        child: Text(
-                          word.source,
-                          maxLines: word.source.length > 20 ? 2 : 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: word.source.length > 20
-                              ? theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  height: 1.2,
-                                )
-                              : theme.textTheme.titleLarge,
+            ],
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              onTap: widget.selectionMode
+                  ? widget.onToggleSelect
+                  : widget.onTap,
+              onLongPress: widget.onLongPress,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg + 2,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          // Long phrases get two lines in a smaller size
+                          // instead of being cut after a few words.
+                          child: Text(
+                            word.source,
+                            maxLines: word.source.length > 20 ? 2 : 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: word.source.length > 20
+                                ? theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.2,
+                                  )
+                                : theme.textTheme.titleLarge,
+                          ),
+                        ),
+                        _buildTrailing(scheme),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.md),
+                      child: Text(
+                        word.target.isEmpty ? '—' : word.target,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: scheme.secondary,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      _buildTrailing(scheme),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.md),
-                    child: Text(
-                      word.target.isEmpty ? '—' : word.target,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: scheme.secondary,
-                        fontWeight: FontWeight.w600,
+                    ),
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.md),
+                      child: _DescriptionPreview(
+                        desc: word.shortExplanation,
+                        generating: widget.generating,
+                        error: widget.generationError,
+                        aiAvailable: widget.aiAvailable,
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  Padding(
-                    padding: const EdgeInsets.only(right: AppSpacing.md),
-                    child: _DescriptionPreview(
-                      desc: word.shortExplanation,
-                      generating: widget.generating,
-                      error: widget.generationError,
-                      aiAvailable: widget.aiAvailable,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -210,7 +216,7 @@ class _DescriptionPreview extends StatelessWidget {
             color: scheme.tertiary,
           ),
         ),
-        'Cody is writing an explanation…',
+        context.s.writingExplanation,
         null,
       ),
       _ when hasDesc => (
@@ -220,17 +226,17 @@ class _DescriptionPreview extends StatelessWidget {
       ),
       _ when error != null => (
         Icon(Icons.error_outline_rounded, size: 14, color: scheme.error),
-        'Explanation failed: ${failureShortReason(error!)} — open for details',
+        context.s.explanationFailed(context.s.failureShortReason(error!)),
         scheme.error,
       ),
       _ when !aiAvailable => (
         Icon(Icons.auto_awesome_outlined, size: 14, color: scheme.outline),
-        'No explanation',
+        context.s.noExplanation,
         null,
       ),
       _ => (
         Icon(Icons.auto_awesome_rounded, size: 14, color: scheme.outline),
-        'No explanation yet — tap to generate',
+        context.s.noExplanationTap,
         null,
       ),
     };

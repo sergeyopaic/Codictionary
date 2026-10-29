@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
+import '../l10n/app_strings.dart';
 
 /// Shows a transient, animated toast with a clapping Cody after adding a word.
 Future<void> showWordAddedPopup(BuildContext context, {String? word}) async {
@@ -87,6 +88,9 @@ class _AddedWordToast extends StatelessWidget {
                         ),
                         padding: const EdgeInsets.all(AppSpacing.xs),
                         child: Image.asset(
+                          // Decorative: a text next to it says the same.
+                          excludeFromSemantics: true,
+
                           CodyArt.clap,
                           filterQuality: FilterQuality.high,
                         ),
@@ -99,13 +103,13 @@ class _AddedWordToast extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Word added!',
+                              context.s.wordAdded,
                               style: theme.textTheme.titleMedium,
                             ),
                             Text(
                               word == null
-                                  ? 'Saved to your dictionary'
-                                  : '"$word" is in your dictionary',
+                                  ? context.s.savedToDictionary
+                                  : context.s.wordInDictionary(word!),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall?.copyWith(

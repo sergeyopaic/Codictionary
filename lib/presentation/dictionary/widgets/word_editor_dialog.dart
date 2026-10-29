@@ -6,6 +6,7 @@ import '../../../domain/exceptions/service_exceptions.dart';
 import '../../../domain/exceptions/storage_exceptions.dart';
 import '../../theme/app_tokens.dart';
 import '../dictionary_view_model.dart';
+import '../../l10n/app_strings.dart';
 
 /// Opens the add/edit word dialog. Returns true when the word was saved.
 Future<bool> showWordEditorDialog(
@@ -162,10 +163,11 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
     } catch (e) {
       if (_stillWanted(request, eng)) {
         setState(
-          () => _translateError =
-              'Not translated: '
-              '${e is ServiceException ? e.message : 'something went wrong.'} '
-              'Type a translation or save without one.',
+          () => _translateError = context.s.notTranslated(
+            e is ServiceException
+                ? context.s.serviceError(e)
+                : context.s.failureShortReason(e),
+          ),
         );
       }
       return null;
@@ -181,7 +183,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
     final eng = _eng.text.trim();
     var rus = _rus.text.trim();
     if (eng.isEmpty) {
-      setState(() => _engError = 'Enter a word first');
+      setState(() => _engError = context.s.enterWordFirst);
       return;
     }
     setState(() {
@@ -213,7 +215,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _saveError = 'Not saved: ${e.message}';
+          _saveError = context.s.notSaved(context.s.storageError(e));
         });
       }
       return;
@@ -227,17 +229,17 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
     } else {
       setState(() {
         _saving = false;
-        _engError = 'This word already exists in this vocabulary';
+        _engError = context.s.wordExists;
       });
     }
   }
 
   String get _subtitle =>
       switch ((widget.vm.translationAvailable, widget.vm.aiAvailable)) {
-        (true, true) => 'Cody will translate and explain it for you.',
-        (true, false) => 'Cody will translate it. AI explanations are off.',
-        (false, true) => 'Type the translation; Cody will explain the word.',
-        (false, false) => 'Local mode: type the translation yourself.',
+        (final translation, final ai) => context.s.editorSubtitle(
+          translation: translation,
+          ai: ai,
+        ),
       };
 
   @override
@@ -283,7 +285,9 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _isEdit ? 'Edit word' : 'Add a word',
+                                  _isEdit
+                                      ? context.s.editWord
+                                      : context.s.addAWord,
                                   style: theme.textTheme.headlineSmall,
                                 ),
                                 Text(
@@ -305,8 +309,8 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                         textInputAction: TextInputAction.next,
                         style: theme.textTheme.titleMedium,
                         decoration: InputDecoration(
-                          labelText: 'English',
-                          hintText: 'e.g. serendipity',
+                          labelText: context.s.english,
+                          hintText: context.s.englishHint,
                           errorText: _engError,
                           prefixIcon: const _LangBadge('EN'),
                         ),
@@ -320,10 +324,10 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                         textInputAction: TextInputAction.done,
                         style: theme.textTheme.titleMedium,
                         decoration: InputDecoration(
-                          labelText: 'Russian',
+                          labelText: context.s.russian,
                           hintText: _autoTranslate
-                              ? 'Filled in automatically'
-                              : 'Type a translation',
+                              ? context.s.russianAutoHint
+                              : context.s.russianTypeHint,
                           prefixIcon: const _LangBadge('RU'),
                           helperText: _translateError,
                           helperMaxLines: 3,
@@ -355,13 +359,13 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                             ? null
                             : _onAutoTranslateChanged,
                         title: Text(
-                          'Auto-translate',
+                          context.s.autoTranslate,
                           style: theme.textTheme.titleSmall,
                         ),
                         subtitle: Text(
                           widget.vm.translationAvailable
-                              ? 'Translate with DeepL as you type'
-                              : 'DeepL is not set up in this app',
+                              ? context.s.autoTranslateOn
+                              : context.s.autoTranslateUnavailable,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -392,7 +396,7 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                     onPressed: _saving
                         ? null
                         : () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
+                    child: Text(context.s.cancel),
                   ),
                   FilledButton.icon(
                     onPressed: _saving ? null : _save,
@@ -409,14 +413,14 @@ class _WordEditorDialogState extends State<WordEditorDialog> {
                           ),
                     label: Text(
                       _saving && _translating
-                          ? 'Translating…'
+                          ? context.s.translating
                           : _saving
-                          ? 'Saving…'
+                          ? context.s.saving
                           : _skipTranslation && _rus.text.trim().isEmpty
-                          ? 'Save without translation'
+                          ? context.s.saveWithoutTranslation
                           : _isEdit
-                          ? 'Save changes'
-                          : 'Add word',
+                          ? context.s.saveChanges
+                          : context.s.addWord,
                     ),
                   ),
                 ],

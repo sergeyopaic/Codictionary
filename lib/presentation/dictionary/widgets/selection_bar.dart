@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_tokens.dart';
+import '../../l10n/app_strings.dart';
 
 /// Floating contextual bar shown while selecting words.
 class SelectionBar extends StatelessWidget {
@@ -46,7 +47,7 @@ class SelectionBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    tooltip: 'Done (Esc)',
+                    tooltip: context.s.selectionDone,
                     color: fg,
                     onPressed: onClose,
                     icon: const Icon(Icons.close_rounded),
@@ -57,7 +58,7 @@ class SelectionBar extends StatelessWidget {
                       horizontal: AppSpacing.sm,
                     ),
                     child: Text(
-                      '$selectedCount selected',
+                      context.s.selectedCount(selectedCount),
                       style: theme.textTheme.titleSmall?.copyWith(color: fg),
                     ),
                   ),
@@ -66,7 +67,9 @@ class SelectionBar extends StatelessWidget {
                       foregroundColor: scheme.inversePrimary,
                     ),
                     onPressed: onToggleAll,
-                    child: Text(allSelected ? 'Clear' : 'Select all'),
+                    child: Text(
+                      allSelected ? context.s.clear : context.s.selectAll,
+                    ),
                   ),
                   const SizedBox(width: AppSpacing.xs),
                   FilledButton.icon(
@@ -80,7 +83,7 @@ class SelectionBar extends StatelessWidget {
                     ),
                     onPressed: selectedCount > 0 ? onDelete : null,
                     icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                    label: const Text('Delete'),
+                    label: Text(context.s.delete),
                   ),
                 ],
               ),

@@ -6,23 +6,32 @@ import '../theme/app_tokens.dart';
 import '../theme/theme_controller.dart';
 import '../vocabs/vocabs_view.dart';
 import '../widgets/brand_mark.dart';
+import '../l10n/app_strings.dart';
 
 class _Destination {
   const _Destination(this.label, this.icon, this.selectedIcon);
-  final String label;
+  final String Function(AppStrings s) label;
   final IconData icon;
   final IconData selectedIcon;
 }
 
+String _dictionaryLabel(AppStrings s) => s.navDictionary;
+String _vocabulariesLabel(AppStrings s) => s.navVocabularies;
+String _backupLabel(AppStrings s) => s.navBackup;
+
 const _destinations = [
-  _Destination('Dictionary', Icons.menu_book_outlined, Icons.menu_book_rounded),
   _Destination(
-    'Vocabularies',
+    _dictionaryLabel,
+    Icons.menu_book_outlined,
+    Icons.menu_book_rounded,
+  ),
+  _Destination(
+    _vocabulariesLabel,
     Icons.collections_bookmark_outlined,
     Icons.collections_bookmark_rounded,
   ),
   _Destination(
-    'Backup',
+    _backupLabel,
     Icons.settings_backup_restore_outlined,
     Icons.settings_backup_restore_rounded,
   ),
@@ -69,7 +78,7 @@ class _AppShellState extends State<AppShell> {
               NavigationDestination(
                 icon: Icon(d.icon),
                 selectedIcon: Icon(d.selectedIcon),
-                label: d.label,
+                label: d.label(context.s),
               ),
           ],
         ),
@@ -135,7 +144,7 @@ class _Sidebar extends StatelessWidget {
                         AppSpacing.sm,
                       ),
                       child: Text(
-                        'LIBRARY',
+                        context.s.library,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                           fontWeight: FontWeight.w700,
@@ -204,7 +213,7 @@ class _NavItem extends StatelessWidget {
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Text(
-                    destination.label,
+                    destination.label(context.s),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleSmall?.copyWith(
@@ -247,7 +256,7 @@ class _TipCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                'Tip',
+                context.s.tipTitle,
                 style: theme.textTheme.titleSmall?.copyWith(
                   color: scheme.onSecondaryContainer,
                 ),
@@ -256,7 +265,7 @@ class _TipCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Long-press a card to drag it. Press Ctrl+N to add a word.',
+            context.s.tipBody(context.s.shortcut('N')),
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSecondaryContainer,
             ),
@@ -278,21 +287,21 @@ class _ThemeSelector extends StatelessWidget {
       builder: (context, mode, _) => SegmentedButton<ThemeMode>(
         showSelectedIcon: false,
         style: const ButtonStyle(visualDensity: VisualDensity.compact),
-        segments: const [
+        segments: [
           ButtonSegment(
             value: ThemeMode.light,
             icon: Icon(Icons.light_mode_rounded, size: 18),
-            tooltip: 'Light',
+            tooltip: context.s.themeLight,
           ),
           ButtonSegment(
             value: ThemeMode.system,
             icon: Icon(Icons.brightness_auto_rounded, size: 18),
-            tooltip: 'System',
+            tooltip: context.s.themeSystem,
           ),
           ButtonSegment(
             value: ThemeMode.dark,
             icon: Icon(Icons.dark_mode_rounded, size: 18),
-            tooltip: 'Dark',
+            tooltip: context.s.themeDark,
           ),
         ],
         selected: {mode},

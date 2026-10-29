@@ -46,43 +46,59 @@ void main() {
     Size(1400, 900),
   ];
 
-  for (final scale in [1.0, 2.0]) {
-    for (final size in sizes) {
-      testWidgets('${size.width.toInt()}×${size.height.toInt()} at '
-          '${(scale * 100).toInt()}% text', (tester) async {
-        tester.view.devicePixelRatio = 1.0;
-        tester.view.physicalSize = size;
-        tester.platformDispatcher.textScaleFactorTestValue = scale;
-        addTearDown(tester.view.reset);
-        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+  // Russian labels are longer; check both interface languages.
+  for (final lang in ['en', 'ru']) {
+    for (final scale in [1.0, 2.0]) {
+      for (final size in sizes) {
+        testWidgets('$lang ${size.width.toInt()}×${size.height.toInt()} at '
+            '${(scale * 100).toInt()}% text', (tester) async {
+          final ru = lang == 'ru';
+          tester.platformDispatcher.localeTestValue = Locale(lang);
+          addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+          tester.view.devicePixelRatio = 1.0;
+          tester.view.physicalSize = size;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-        await tester.pumpWidget(
-          CodictionaryApp(useCases: testUseCases(storage: storage())),
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('serendipity'), findsOneWidget);
+          await tester.pumpWidget(
+            CodictionaryApp(useCases: testUseCases(storage: storage())),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('serendipity'), findsOneWidget);
 
-        // Add-word dialog.
-        await tester.tap(find.text('Add word').first);
-        await tester.pumpAndSettle();
-        expect(find.text('Add a word'), findsOneWidget);
-        await tester.tap(find.text('Cancel'));
-        await tester.pumpAndSettle();
+          // Add-word dialog.
+          await tester.tap(find.text(ru ? 'Добавить слово' : 'Add word').first);
+          await tester.pumpAndSettle();
+          expect(find.text(ru ? 'Новое слово' : 'Add a word'), findsOneWidget);
+          await tester.tap(find.text(ru ? 'Отмена' : 'Cancel'));
+          await tester.pumpAndSettle();
 
-        // Vocabularies and one vocabulary.
-        await tester.tap(find.text('Vocabularies').last);
-        await tester.pumpAndSettle();
-        await tester.tap(find.textContaining('Travel and everything'));
-        await tester.pumpAndSettle();
-        expect(find.textContaining('grain of salt'), findsOneWidget);
-        await tester.pageBack();
-        await tester.pumpAndSettle();
+          // Vocabularies and one vocabulary.
+          await tester.tap(find.text(ru ? 'Коллекции' : 'Vocabularies').last);
+          await tester.pumpAndSettle();
+          await tester.tap(find.textContaining('Travel and everything'));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('grain of salt'), findsOneWidget);
+          await tester.tap(find.byTooltip(ru ? 'Назад' : 'Back'));
+          await tester.pumpAndSettle();
 
-        // Backup.
-        await tester.tap(find.text('Backup').last);
-        await tester.pumpAndSettle();
-        expect(find.text('Back up your dictionary'), findsOneWidget);
-      });
+          // Backup.
+          await tester.tap(find.text(ru ? 'Копии' : 'Backup').last);
+          await tester.pumpAndSettle();
+          // On a tiny screen with large text the header fills the view;
+          // the cards are below and reachable by scrolling.
+          final backUp = find.text(
+            ru ? 'Сохранить копию словаря' : 'Back up your dictionary',
+          );
+          await tester.scrollUntilVisible(
+            backUp,
+            200,
+            scrollable: find.byType(Scrollable).last,
+          );
+          expect(backUp, findsOneWidget);
+        });
+      }
     }
   }
 }

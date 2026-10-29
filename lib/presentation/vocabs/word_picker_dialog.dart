@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/entities/word_entity.dart';
 import '../theme/app_tokens.dart';
+import '../l10n/app_strings.dart';
 
 /// Lets the user pick dictionary words to add to a collection. Returns the
 /// chosen ids, or null if cancelled.
@@ -44,11 +45,11 @@ class _WordPickerDialogState extends State<_WordPickerDialog> {
               .toList();
 
     final String? emptyText = widget.dictionaryEmpty
-        ? 'Your dictionary is empty. Add words in the Dictionary first.'
+        ? context.s.pickerDictionaryEmpty
         : widget.words.isEmpty
-        ? 'Every dictionary word is already in this vocabulary.'
+        ? context.s.pickerAllAdded
         : shown.isEmpty
-        ? 'No words match "$_query".'
+        ? context.s.pickerNoMatch(_query)
         : null;
 
     return Dialog(
@@ -60,13 +61,13 @@ class _WordPickerDialogState extends State<_WordPickerDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Add words', style: theme.textTheme.headlineSmall),
+              Text(context.s.addWords, style: theme.textTheme.headlineSmall),
               const SizedBox(height: AppSpacing.lg),
               if (widget.words.isNotEmpty) ...[
                 TextField(
                   autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Search words',
+                  decoration: InputDecoration(
+                    hintText: context.s.searchHintShort,
                     prefixIcon: Icon(Icons.search_rounded),
                   ),
                   onChanged: (v) => setState(() => _query = v),
@@ -112,7 +113,7 @@ class _WordPickerDialogState extends State<_WordPickerDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: Text(context.s.cancel),
                   ),
                   FilledButton(
                     onPressed: _picked.isEmpty
@@ -124,8 +125,8 @@ class _WordPickerDialogState extends State<_WordPickerDialog> {
                           ]),
                     child: Text(
                       _picked.length <= 1
-                          ? 'Add word'
-                          : 'Add ${_picked.length} words',
+                          ? context.s.addNWords(1)
+                          : context.s.addNWords(_picked.length),
                     ),
                   ),
                 ],
