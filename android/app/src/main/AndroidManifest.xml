@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Translation (DeepL) and explanations (OpenAI) need network access.
+         The debug/profile manifests add this only for development tooling,
+         so without it here release builds could not make any request. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="codictionary"
         android:name="${applicationName}"
