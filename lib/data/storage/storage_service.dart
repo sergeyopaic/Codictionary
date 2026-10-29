@@ -1,4 +1,5 @@
 import '../../domain/exceptions/storage_exceptions.dart';
+import '../models/vocabulary_record.dart';
 import '../models/word_record.dart';
 
 /// Local persistence. Missing data reads as empty; any other failure throws a
@@ -14,7 +15,7 @@ abstract class StorageService {
   /// Recovers a damaged dictionary; the damaged data is kept aside.
   Future<void> recoverWords(StorageRecovery action);
 
-  // Vocabulary storage (name, description, iconPath)
-  Future<List<Map<String, String>>> loadVocabularies();
-  Future<void> saveVocabularies(List<Map<String, String>> vocabs);
+  /// Collections. Same failure contract as words.
+  Future<List<VocabularyRecord>> loadVocabularies();
+  Future<void> saveVocabularies(List<VocabularyRecord> vocabs);
 }

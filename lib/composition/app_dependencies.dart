@@ -9,11 +9,11 @@ import '../domain/usecases/add_word.dart';
 import '../domain/usecases/explain_word.dart';
 import '../domain/usecases/get_all_words.dart';
 import '../domain/usecases/get_vocabularies.dart';
+import '../domain/usecases/manage_vocabularies.dart';
 import '../domain/usecases/recover_words.dart';
 import '../domain/usecases/remove_word.dart';
 import '../domain/usecases/reorder_words.dart';
 import '../domain/usecases/restore_word.dart';
-import '../domain/usecases/save_vocabularies.dart';
 import '../domain/usecases/translate_word.dart';
 import '../domain/usecases/update_word.dart';
 import '../presentation/app_scope.dart';
@@ -43,7 +43,11 @@ AppUseCases buildUseCases({
     explainWord: ExplainWord(explainer),
     translateWord: TranslateWord(translator),
     getVocabularies: GetVocabularies(vocabularies),
-    saveVocabularies: SaveVocabularies(vocabularies),
+    createVocabulary: CreateVocabulary(vocabularies),
+    updateVocabulary: UpdateVocabulary(vocabularies),
+    deleteVocabulary: DeleteVocabulary(vocabularies),
+    restoreVocabulary: RestoreVocabulary(vocabularies),
+    setWordInVocabulary: SetWordInVocabulary(vocabularies),
   );
 }
 

@@ -7,11 +7,13 @@ class WordCardMenu extends StatelessWidget {
     required this.onExplain,
     required this.onEdit,
     required this.onDelete,
+    this.onCollections,
   });
 
   final VoidCallback onExplain;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onCollections;
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +31,12 @@ class WordCardMenu extends StatelessWidget {
           onPressed: onEdit,
           child: const Text('Edit word'),
         ),
+        if (onCollections != null)
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.collections_bookmark_outlined),
+            onPressed: onCollections,
+            child: const Text('Vocabularies…'),
+          ),
         const Divider(height: 9),
         MenuItemButton(
           leadingIcon: Icon(Icons.delete_outline_rounded, color: scheme.error),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../domain/exceptions/storage_exceptions.dart';
+import '../models/vocabulary_record.dart';
 import '../models/word_record.dart';
 import 'storage_backend.dart';
 import 'storage_service.dart';
@@ -80,26 +81,25 @@ class SafeJsonStorage implements StorageService {
   // Vocabularies
 
   @override
-  Future<List<Map<String, String>>> loadVocabularies() async {
+  Future<List<VocabularyRecord>> loadVocabularies() async {
     final raw = await _loadValid(vocabsKey, _parseVocabs);
     return raw == null ? [] : _parseVocabs(raw);
   }
 
   @override
-  Future<void> saveVocabularies(List<Map<String, String>> vocabs) =>
-      _save(vocabsKey, jsonEncode(vocabs), _parseVocabs);
+  Future<void> saveVocabularies(List<VocabularyRecord> vocabs) => _save(
+    vocabsKey,
+    jsonEncode([for (final v in vocabs) v.toMap()]),
+    _parseVocabs,
+  );
 
-  static List<Map<String, String>> _parseVocabs(String raw) {
+  static List<VocabularyRecord> _parseVocabs(String raw) {
     final decoded = jsonDecode(raw);
     if (decoded is! List) throw const FormatException('Expected a list');
     return [
       for (final e in decoded)
         if (e is Map)
-          {
-            'name': (e['name'] ?? '').toString(),
-            'description': (e['description'] ?? '').toString(),
-            'icon': (e['icon'] ?? '').toString(),
-          }
+          VocabularyRecord.fromMap(e)
         else
           throw const FormatException('Expected an object'),
     ];

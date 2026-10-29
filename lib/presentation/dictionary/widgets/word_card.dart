@@ -20,6 +20,7 @@ class WordCard extends StatefulWidget {
     required this.onExplain,
     required this.onEdit,
     required this.onDelete,
+    this.onCollections,
   });
 
   final WordEntity word;
@@ -38,6 +39,7 @@ class WordCard extends StatefulWidget {
   final VoidCallback onExplain;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onCollections;
 
   @override
   State<WordCard> createState() => _WordCardState();
@@ -167,6 +169,7 @@ class _WordCardState extends State<WordCard> {
       onExplain: widget.onExplain,
       onEdit: widget.onEdit,
       onDelete: widget.onDelete,
+      onCollections: widget.onCollections,
     );
   }
 }

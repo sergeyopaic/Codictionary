@@ -10,6 +10,7 @@ import '../app_scope.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
 import '../dialogs/confirm_delete_dialog.dart';
 import '../theme/app_tokens.dart';
+import '../vocabs/word_collections_dialog.dart';
 import '../widgets/added_word_popup.dart' as toasts;
 import '../widgets/brand_mark.dart';
 import '../widgets/empty_state.dart';
@@ -519,6 +520,11 @@ class _DictionaryViewState extends State<DictionaryView> {
                   onExplain: () => _openDetails(word),
                   onEdit: () => _editWord(word.id),
                   onDelete: () => _deleteWord(word),
+                  onCollections: () => showWordCollectionsDialog(
+                    context,
+                    wordId: word.id,
+                    word: word.source,
+                  ),
                 ),
               ),
             );

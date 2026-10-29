@@ -1,10 +1,23 @@
 import '../entities/vocabulary.dart';
 import '../exceptions/storage_exceptions.dart';
 
-/// Storage failures surface as [StorageException]s.
+/// Collections and their members. Storage failures surface as
+/// [StorageException]s and leave the stored data unchanged.
 abstract class VocabularyRepository {
+  /// All collections in display order.
   Future<List<Vocabulary>> getAll();
 
-  /// Replaces the stored list; unchanged on failure.
-  Future<void> saveAll(List<Vocabulary> vocabularies);
+  /// Stores a new collection (with its members) at [index], appended if null.
+  Future<void> create(Vocabulary vocabulary, {int? index});
+
+  /// Changes name, description and icon. Members are kept as stored, so an
+  /// edit never undoes a membership change made meanwhile. Missing ids are
+  /// ignored.
+  Future<void> updateDetails(Vocabulary vocabulary);
+
+  /// Removes a collection and its links; the words themselves stay.
+  Future<void> remove(String id);
+
+  /// Adds or removes one word, atomically. Idempotent.
+  Future<void> setMembership(String vocabularyId, String wordId, bool member);
 }

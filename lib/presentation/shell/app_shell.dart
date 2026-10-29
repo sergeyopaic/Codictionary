@@ -39,7 +39,10 @@ class _AppShellState extends State<AppShell> {
     final wide = AppBreakpoints.isWide(context);
     final pages = IndexedStack(
       index: _index,
-      children: [const DictionaryView(), const VocabsView()],
+      children: [
+        const DictionaryView(),
+        VocabsView(isActive: _index == 1),
+      ],
     );
 
     if (!wide) {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
+import 'package:codictionary/data/models/vocabulary_record.dart';
 import 'package:codictionary/data/models/word_record.dart';
 import 'package:codictionary/data/storage/storage_service.dart';
 
@@ -8,11 +9,17 @@ import 'package:codictionary/data/storage/storage_service.dart';
 /// and localStorage implementations. Going through [WordRecord.toMap] /
 /// [WordRecord.fromMap] on every call exercises the real persistence mapping.
 class JsonStorageService implements StorageService {
-  JsonStorageService({List<Map<String, dynamic>>? rawWords})
-    : wordsJson = jsonEncode(rawWords ?? const []);
+  JsonStorageService({
+    List<Map<String, dynamic>>? rawWords,
+    List<Map<String, dynamic>>? rawVocabularies,
+  }) : wordsJson = jsonEncode(rawWords ?? const []),
+       vocabsJson = jsonEncode(rawVocabularies ?? const []);
 
   String wordsJson;
-  String vocabsJson = '[]';
+  String vocabsJson;
+
+  List<Map<String, dynamic>> get rawVocabularies =>
+      (jsonDecode(vocabsJson) as List).cast<Map<String, dynamic>>();
 
   List<Map<String, dynamic>> get rawWords =>
       (jsonDecode(wordsJson) as List).cast<Map<String, dynamic>>();
@@ -30,12 +37,12 @@ class JsonStorageService implements StorageService {
       throw UnsupportedError('JsonStorageService never reports damage');
 
   @override
-  Future<List<Map<String, String>>> loadVocabularies() async =>
-      (jsonDecode(vocabsJson) as List)
-          .map((e) => Map<String, String>.from(e as Map))
-          .toList();
+  Future<List<VocabularyRecord>> loadVocabularies() async => [
+    for (final e in jsonDecode(vocabsJson) as List)
+      VocabularyRecord.fromMap(e as Map),
+  ];
 
   @override
-  Future<void> saveVocabularies(List<Map<String, String>> vocabs) async =>
-      vocabsJson = jsonEncode(vocabs);
+  Future<void> saveVocabularies(List<VocabularyRecord> vocabs) async =>
+      vocabsJson = jsonEncode([for (final v in vocabs) v.toMap()]);
 }

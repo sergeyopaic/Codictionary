@@ -2,82 +2,69 @@ import 'package:flutter/material.dart';
 
 import '../../domain/entities/vocabulary.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
-import '../../domain/usecases/get_vocabularies.dart';
-import '../../domain/usecases/save_vocabularies.dart';
 import '../app_scope.dart';
 import '../dialogs/confirm_dialog.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/page_header.dart';
 import 'create_vocabulary_dialog.dart';
+import 'vocabs_view_model.dart';
+import 'vocabulary_words_view.dart';
 
 class VocabsView extends StatefulWidget {
-  const VocabsView({super.key});
+  const VocabsView({super.key, this.isActive = true});
+
+  /// Whether this tab is on screen. Becoming active reloads, so words added
+  /// or deleted in the dictionary show up in the collections.
+  final bool isActive;
 
   @override
   State<VocabsView> createState() => _VocabsViewState();
 }
 
 class _VocabsViewState extends State<VocabsView> {
-  final List<Vocabulary> _vocabs = [];
-  late final GetVocabularies _getVocabularies;
-  late final SaveVocabularies _saveVocabularies;
-  bool _loaded = false;
-
-  /// Set when stored vocabularies could not be read. Editing is disabled so
-  /// the stored data is not replaced by an empty list.
-  StorageException? _loadError;
+  late final VocabsViewModel vm;
 
   @override
   void initState() {
     super.initState();
-    final useCases = AppScope.read(context);
-    _getVocabularies = useCases.getVocabularies;
-    _saveVocabularies = useCases.saveVocabularies;
-    _load();
+    vm = VocabsViewModel(AppScope.read(context));
+    vm.load();
   }
 
-  Future<void> _load() async {
-    List<Vocabulary> loaded = const [];
-    StorageException? error;
-    try {
-      loaded = await _getVocabularies();
-    } on StorageException catch (e) {
-      error = e;
-    }
-    if (!mounted) return;
-    setState(() {
-      _vocabs
-        ..clear()
-        ..addAll(loaded);
-      _loadError = error;
-      _loaded = true;
-    });
+  @override
+  void didUpdateWidget(VocabsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) vm.load();
   }
 
-  /// Saves the list. On failure shows why and reloads what is really stored,
-  /// so the screen never shows an unsaved change as saved.
-  Future<void> _persist() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await _saveVocabularies(List.of(_vocabs));
-    } on StorageException catch (e) {
-      messenger.showSnackBar(
-        SnackBar(content: Text('Not saved: ${e.message}')),
-      );
-      await _load();
-    }
+  @override
+  void dispose() {
+    vm.dispose();
+    super.dispose();
+  }
+
+  void _notSaved(ScaffoldMessengerState messenger, StorageException e) {
+    messenger.showSnackBar(SnackBar(content: Text('Not saved: ${e.message}')));
   }
 
   Future<void> _create() async {
+    final messenger = ScaffoldMessenger.of(context);
     final res = await showCreateVocabularyDialog(context);
     if (res == null) return;
-    setState(() => _vocabs.add(_fromDialog(res)));
-    await _persist();
+    try {
+      await vm.create(
+        name: _name(res),
+        description: res['description'] ?? '',
+        iconPath: res['icon'] ?? vocabIconPath(1),
+      );
+    } on StorageException catch (e) {
+      _notSaved(messenger, e);
+    }
   }
 
-  Future<void> _editAt(int index) async {
-    final v = _vocabs[index];
+  Future<void> _edit(Vocabulary v) async {
+    final messenger = ScaffoldMessenger.of(context);
     final res = await showCreateVocabularyDialog(
       context,
       initialName: v.name,
@@ -85,40 +72,81 @@ class _VocabsViewState extends State<VocabsView> {
       initialIcon: v.iconPath,
     );
     if (res == null) return;
-    setState(() => _vocabs[index] = _fromDialog(res));
-    await _persist();
+    try {
+      await vm.updateDetails(
+        v.copyWith(
+          name: _name(res),
+          description: res['description'] ?? '',
+          iconPath: res['icon'] ?? v.iconPath,
+        ),
+      );
+    } on StorageException catch (e) {
+      _notSaved(messenger, e);
+    }
   }
 
-  Future<void> _deleteAt(int index) async {
-    final v = _vocabs[index];
+  Future<void> _delete(Vocabulary v) async {
     final messenger = ScaffoldMessenger.of(context);
+    final count = vm.wordsOf(v).length;
     final ok = await showConfirmDialog(
       context,
       title: 'Delete vocabulary?',
-      message: '"${v.name}" will be removed.',
+      message: count == 0
+          ? '"${v.name}" will be removed.'
+          : '"${v.name}" will be removed. Its $count '
+                '${count == 1 ? 'word stays' : 'words stay'} in your dictionary.',
     );
     if (!ok) return;
-    setState(() => _vocabs.removeAt(index));
-    await _persist();
+    final ({Vocabulary vocabulary, int index})? deleted;
+    try {
+      deleted = await vm.delete(v.id);
+    } on StorageException catch (e) {
+      _notSaved(messenger, e);
+      return;
+    }
+    if (deleted == null) return;
+    final undo = deleted;
     messenger.showSnackBar(
       SnackBar(
         content: Text('"${v.name}" deleted.'),
         action: SnackBarAction(
           label: 'Undo',
-          onPressed: () {
-            if (!mounted) return;
-            setState(() => _vocabs.insert(index.clamp(0, _vocabs.length), v));
-            _persist();
+          onPressed: () async {
+            try {
+              await vm.restore(undo.vocabulary, undo.index);
+            } on StorageException catch (e) {
+              _notSaved(messenger, e);
+            }
           },
         ),
       ),
     );
   }
 
+  void _open(Vocabulary v) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VocabularyWordsView(vm: vm, vocabularyId: v.id),
+      ),
+    );
+  }
+
+  static String _name(Map<String, String> res) =>
+      (res['name'] ?? '').isEmpty ? 'Untitled' : res['name']!;
+
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: vm,
+      builder: (context, _) => _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     final wide = AppBreakpoints.isWide(context);
     final pad = wide ? AppSpacing.xxl : AppSpacing.lg;
+    final count = vm.vocabularies.length;
+    final canEdit = vm.loaded && vm.loadError == null;
     return Scaffold(
       body: SafeArea(
         bottom: false,
@@ -134,11 +162,10 @@ class _VocabsViewState extends State<VocabsView> {
                   padding: EdgeInsets.fromLTRB(pad, pad, pad, AppSpacing.xl),
                   child: PageHeader(
                     title: 'Vocabularies',
-                    subtitle: _vocabs.isEmpty
+                    subtitle: count == 0
                         ? 'Organize words into themed collections'
-                        : '${_vocabs.length} '
-                              '${_vocabs.length == 1 ? 'collection' : 'collections'}',
-                    trailing: wide && _loadError == null
+                        : '$count ${count == 1 ? 'collection' : 'collections'}',
+                    trailing: wide && canEdit
                         ? FilledButton.icon(
                             onPressed: _create,
                             icon: const Icon(Icons.add_rounded),
@@ -153,7 +180,7 @@ class _VocabsViewState extends State<VocabsView> {
           ),
         ),
       ),
-      floatingActionButton: wide || _loadError != null
+      floatingActionButton: wide || !canEdit
           ? null
           : FloatingActionButton.extended(
               icon: const Icon(Icons.add_rounded),
@@ -164,21 +191,21 @@ class _VocabsViewState extends State<VocabsView> {
   }
 
   Widget _buildContent(double pad) {
-    if (!_loaded) return const Center(child: CircularProgressIndicator());
-    final loadError = _loadError;
+    if (!vm.loaded) return const Center(child: CircularProgressIndicator());
+    final loadError = vm.loadError;
     if (loadError != null) {
       return EmptyState(
         image: CodyArt.delete,
         title: "Can't open your vocabularies",
         message: '${loadError.message} Nothing was changed.',
         action: FilledButton.icon(
-          onPressed: _load,
+          onPressed: vm.load,
           icon: const Icon(Icons.refresh_rounded),
           label: const Text('Try again'),
         ),
       );
     }
-    if (_vocabs.isEmpty) {
+    if (vm.vocabularies.isEmpty) {
       return EmptyState(
         image: CodyArt.reading,
         title: 'No vocabularies yet',
@@ -205,31 +232,33 @@ class _VocabsViewState extends State<VocabsView> {
             crossAxisSpacing: gap,
             mainAxisExtent: 112,
           ),
-          itemCount: _vocabs.length,
-          itemBuilder: (context, i) => _VocabCard(
-            vocab: _vocabs[i],
-            onEdit: () => _editAt(i),
-            onDelete: () => _deleteAt(i),
-          ),
+          itemCount: vm.vocabularies.length,
+          itemBuilder: (context, i) {
+            final v = vm.vocabularies[i];
+            return _VocabCard(
+              vocab: v,
+              wordCount: vm.wordsOf(v).length,
+              onOpen: () => _open(v),
+              onEdit: () => _edit(v),
+              onDelete: () => _delete(v),
+            );
+          },
         );
       },
     );
   }
 }
 
-/// Builds a vocabulary from the create/edit dialog result.
-Vocabulary _fromDialog(Map<String, String> m) => Vocabulary(
-  name: (m['name'] ?? '').isEmpty ? 'Untitled' : m['name']!,
-  description: m['description'] ?? '',
-  iconPath: m['icon'] ?? vocabIconPath(1),
-);
-
 class _VocabCard extends StatelessWidget {
   final Vocabulary vocab;
+  final int wordCount;
+  final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   const _VocabCard({
     required this.vocab,
+    required this.wordCount,
+    required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
@@ -240,7 +269,7 @@ class _VocabCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     return Card(
       child: InkWell(
-        onTap: onEdit,
+        onTap: onOpen,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
@@ -281,12 +310,19 @@ class _VocabCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    Text(
+                      wordCount == 1 ? '1 word' : '$wordCount words',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       vocab.description.isEmpty
                           ? 'No description'
                           : vocab.description,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: scheme.onSurfaceVariant,
