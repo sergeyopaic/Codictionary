@@ -1,9 +1,9 @@
 import 'dart:convert';
 
 import '../../domain/exceptions/storage_exceptions.dart';
-import '../../models/word.dart';
+import '../models/word_record.dart';
 import 'storage_backend.dart';
-import 'storage_interface.dart';
+import 'storage_service.dart';
 
 /// [StorageService] that never loses data silently:
 ///
@@ -31,7 +31,7 @@ class SafeJsonStorage implements StorageService {
   // Words
 
   @override
-  Future<List<Word>> loadWords() async {
+  Future<List<WordRecord>> loadWords() async {
     final raw = await _loadValid(wordsKey, _parseWords);
     if (raw == null) return [];
     final words = _parseWords(raw);
@@ -48,7 +48,7 @@ class SafeJsonStorage implements StorageService {
   }
 
   @override
-  Future<void> saveWords(List<Word> words) => _save(
+  Future<void> saveWords(List<WordRecord> words) => _save(
     wordsKey,
     jsonEncode(words.map((w) => w.toMap()).toList()),
     _parseWords,
@@ -58,13 +58,13 @@ class SafeJsonStorage implements StorageService {
   Future<void> recoverWords(StorageRecovery action) =>
       _recover(wordsKey, action, _parseWords);
 
-  static List<Word> _parseWords(String raw) {
+  static List<WordRecord> _parseWords(String raw) {
     final decoded = jsonDecode(raw);
     if (decoded is! List) throw const FormatException('Expected a list');
     return [
       for (final e in decoded)
         if (e is Map<String, dynamic>)
-          Word.fromMap(e)
+          WordRecord.fromMap(e)
         else
           throw const FormatException('Expected an object'),
     ];

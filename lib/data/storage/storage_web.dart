@@ -4,7 +4,7 @@ import 'dart:html' as html;
 import '../../domain/exceptions/storage_exceptions.dart';
 import 'safe_json_storage.dart';
 import 'storage_backend.dart';
-import 'storage_interface.dart';
+import 'storage_service.dart';
 
 /// Stores each key in the browser's localStorage.
 class LocalStorageBackend implements StorageBackend {

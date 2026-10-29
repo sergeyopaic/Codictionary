@@ -4,19 +4,19 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
-import 'package:codictionary/models/word.dart';
-import 'package:codictionary/services/storage/safe_json_storage.dart';
-import 'package:codictionary/services/storage/storage_io.dart';
+import 'package:codictionary/data/models/word_record.dart';
+import 'package:codictionary/data/storage/safe_json_storage.dart';
+import 'package:codictionary/data/storage/storage_io.dart';
 
 import '../fakes/memory_backend.dart';
 
 const _key = 'dictionary.json';
 const _bak = 'dictionary.json.bak';
 
-Word _w(String id, String eng) =>
-    Word(id: id, eng: eng, rus: 'ru', addedAt: DateTime.utc(2025));
+WordRecord _w(String id, String eng) =>
+    WordRecord(id: id, eng: eng, rus: 'ru', addedAt: DateTime.utc(2025));
 
-String _json(List<Word> words) =>
+String _json(List<WordRecord> words) =>
     jsonEncode(words.map((w) => w.toMap()).toList());
 
 SafeJsonStorage _storage(MemoryBackend backend) => SafeJsonStorage(

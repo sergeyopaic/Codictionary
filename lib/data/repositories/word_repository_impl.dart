@@ -4,8 +4,8 @@ import '../../domain/entities/word_entity.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
 import '../../domain/exceptions/word_exceptions.dart';
 import '../../domain/repositories/word_repository.dart';
-import '../../services/storage/storage_interface.dart' as legacy;
-import '../../models/word.dart' as record;
+import '../storage/storage_service.dart' as legacy;
+import '../models/word_record.dart' as record;
 
 /// Every operation reads the whole list, changes it and writes it back. Two
 /// such cycles running at once would lose one of the changes, so operations
@@ -82,14 +82,14 @@ class WordRepositoryImpl implements WordRepository {
   /// Loads stored records and repairs empty or duplicate ids. Without this,
   /// an empty id gets a new random id on every load and duplicates make
   /// updates and removals hit the wrong entry. Repairs are persisted once.
-  Future<List<record.Word>> _loadNormalized() async {
+  Future<List<record.WordRecord>> _loadNormalized() async {
     final records = List.of(await storage.loadWords());
     final seen = <String>{};
     var changed = false;
     for (var i = 0; i < records.length; i++) {
       final r = records[i];
       if (r.id.isEmpty || seen.contains(r.id)) {
-        records[i] = record.Word(
+        records[i] = record.WordRecord(
           id: const Uuid().v4(),
           eng: r.eng,
           rus: r.rus,
@@ -111,7 +111,7 @@ class WordRepositoryImpl implements WordRepository {
     return records;
   }
 
-  static WordEntity _toEntity(record.Word r) => WordEntity(
+  static WordEntity _toEntity(record.WordRecord r) => WordEntity(
     id: r.id,
     source: r.eng,
     target: r.rus,
@@ -120,8 +120,8 @@ class WordRepositoryImpl implements WordRepository {
     createdAt: r.addedAt,
   );
 
-  static record.Word _toRecord(WordEntity w, {DateTime? createdAt}) =>
-      record.Word(
+  static record.WordRecord _toRecord(WordEntity w, {DateTime? createdAt}) =>
+      record.WordRecord(
         id: w.id,
         eng: w.source,
         rus: w.target,

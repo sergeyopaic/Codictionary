@@ -9,11 +9,10 @@ import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:codictionary/main.dart';
-import 'package:codictionary/services/gpt_service.dart';
-import 'package:codictionary/services/translate_service.dart';
+import 'package:codictionary/presentation/app.dart';
 
 import 'fakes/json_storage_service.dart';
+import 'helpers/test_dependencies.dart';
 
 void main() {
   testWidgets('App builds and shows Add Word button', (
@@ -31,11 +30,7 @@ void main() {
     final storage = JsonStorageService();
 
     await tester.pumpWidget(
-      MyApp(
-        gpt: GptService(''),
-        translate: TranslateService(''),
-        storage: storage,
-      ),
+      CodictionaryApp(useCases: testUseCases(storage: storage)),
     );
 
     // Expect the Add Word FAB to be present

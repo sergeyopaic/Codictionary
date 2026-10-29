@@ -6,9 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'package:codictionary/domain/exceptions/service_exceptions.dart';
-import 'package:codictionary/services/gpt_service.dart';
-import 'package:codictionary/services/http/service_call.dart';
-import 'package:codictionary/services/translate_service.dart';
+import 'package:codictionary/data/remote/openai_explainer.dart';
+import 'package:codictionary/data/remote/service_call.dart';
+import 'package:codictionary/data/remote/deepl_translator.dart';
 
 const _key = 'sk-test-SECRET-KEY';
 
@@ -45,11 +45,11 @@ void main() {
     sleeps = [];
   });
 
-  GptService gpt(
+  OpenAiExplainer gpt(
     FutureOr<http.Response> Function(http.Request) handler, {
     String key = _key,
     Duration timeout = const Duration(seconds: 5),
-  }) => GptService(
+  }) => OpenAiExplainer(
     key,
     client: MockClient((r) async {
       calls++;
@@ -59,11 +59,11 @@ void main() {
     sleep: (d) async => sleeps.add(d),
   );
 
-  TranslateService deepl(
+  DeepLTranslator deepl(
     FutureOr<http.Response> Function(http.Request) handler, {
     String key = 'deepl-key:fx',
     Uri? endpoint,
-  }) => TranslateService(
+  }) => DeepLTranslator(
     key,
     client: MockClient((r) async {
       calls++;
@@ -89,7 +89,7 @@ void main() {
       );
 
       expect(
-        await client.explainWordShort('resilient'),
+        await client.explainShort('resilient'),
         'Стойкий — способный восстанавливаться.\nПример: Kids are resilient.',
       );
     });
@@ -98,7 +98,7 @@ void main() {
       'sends the key as a bearer token to the configured endpoint',
       () async {
         late http.Request sent;
-        final client = GptService(
+        final client = OpenAiExplainer(
           _key,
           endpoint: Uri.parse('https://gateway.test/explain'),
           client: MockClient((r) async {
@@ -111,7 +111,7 @@ void main() {
           }),
         );
 
-        await client.explainWordShort('apple');
+        await client.explainShort('apple');
 
         expect(sent.url.toString(), 'https://gateway.test/explain');
         expect(sent.headers['Authorization'], 'Bearer $_key');
@@ -122,7 +122,7 @@ void main() {
       final client = gpt((_) => _json({}), key: '  ');
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         _fails(ServiceFailure.notConfigured),
       );
       expect(calls, 0);
@@ -135,7 +135,7 @@ void main() {
     ]) {
       test('HTTP $status is $failure and not retried', () async {
         final client = gpt((_) => _json({'error': {}}, status));
-        await expectLater(client.explainWordShort('apple'), _fails(failure));
+        await expectLater(client.explainShort('apple'), _fails(failure));
         expect(calls, 1);
       });
     }
@@ -148,7 +148,7 @@ void main() {
       );
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         throwsA(
           isA<ServiceException>()
               .having((e) => e.failure, 'failure', ServiceFailure.quotaExceeded)
@@ -171,7 +171,7 @@ void main() {
               ),
       );
 
-      expect(await client.explainWordShort('apple'), 'ok');
+      expect(await client.explainShort('apple'), 'ok');
       expect(calls, 3);
       expect(sleeps, [const Duration(seconds: 1), const Duration(seconds: 2)]);
     });
@@ -180,7 +180,7 @@ void main() {
       final client = gpt((_) => http.Response('oops', 503));
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         _fails(ServiceFailure.server),
       );
       expect(calls, const RetryPolicy().maxAttempts);
@@ -190,7 +190,7 @@ void main() {
       final client = gpt((_) => throw http.ClientException('connection reset'));
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         _fails(ServiceFailure.network),
       );
       expect(calls, 3);
@@ -204,7 +204,7 @@ void main() {
       );
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         _fails(ServiceFailure.timeout),
       );
       expect(calls, 1, reason: 'timeouts are not retried');
@@ -219,7 +219,7 @@ void main() {
         {'output': 'nonsense'},
       ]) {
         await expectLater(
-          gpt((_) => _json(body)).explainWordShort('apple'),
+          gpt((_) => _json(body)).explainShort('apple'),
           _fails(ServiceFailure.invalidResponse),
         );
       }
@@ -227,7 +227,7 @@ void main() {
 
     test('invalid JSON is an error', () async {
       await expectLater(
-        gpt((_) => http.Response('{not json', 200)).explainWordShort('apple'),
+        gpt((_) => http.Response('{not json', 200)).explainShort('apple'),
         _fails(ServiceFailure.invalidResponse),
       );
     });
@@ -243,7 +243,7 @@ void main() {
       );
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         throwsA(
           isA<ServiceException>()
               .having((e) => e.failure, 'failure', ServiceFailure.incomplete)
@@ -264,7 +264,7 @@ void main() {
       );
 
       await expectLater(
-        client.explainWordShort('apple'),
+        client.explainShort('apple'),
         _fails(ServiceFailure.refused),
       );
     });
@@ -277,7 +277,7 @@ void main() {
       );
 
       try {
-        await client.explainWordShort('apple');
+        await client.explainShort('apple');
         fail('expected an error');
       } on ServiceException catch (e) {
         expect('$e ${e.message}', isNot(contains('SECRET')));
@@ -306,9 +306,9 @@ void main() {
     });
 
     test('pro keys use the pro endpoint; an override wins', () async {
-      expect(TranslateService('pro-key').endpoint.host, 'api.deepl.com');
+      expect(DeepLTranslator('pro-key').endpoint.host, 'api.deepl.com');
       expect(
-        TranslateService(
+        DeepLTranslator(
           'pro-key',
           endpoint: Uri.parse('https://gateway.test/translate'),
         ).endpoint.host,

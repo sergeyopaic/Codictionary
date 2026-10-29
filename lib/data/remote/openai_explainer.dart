@@ -2,15 +2,16 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../domain/exceptions/service_exceptions.dart';
-import 'http/service_call.dart';
+import '../../domain/exceptions/service_exceptions.dart';
+import '../../domain/services/word_explainer.dart';
+import 'service_call.dart';
 
 /// OpenAI Responses API client for word explanations.
 ///
 /// Returns explanation text or throws a [ServiceException]; it never returns
 /// a diagnostic string that could be stored as an explanation.
-class GptService {
-  GptService(
+class OpenAiExplainer implements WordExplainer {
+  OpenAiExplainer(
     this.apiKey, {
     http.Client? client,
     Uri? endpoint,
@@ -32,11 +33,11 @@ class GptService {
   final http.Client _client;
   final Sleep _sleep;
 
-  /// False in local mode (no key): the app then never asks for explanations.
-  bool get isConfigured => apiKey.trim().isNotEmpty;
+  @override
+  bool get isAvailable => apiKey.trim().isNotEmpty;
 
   Future<String> sendPrompt(String prompt, {int maxTokens = 400}) async {
-    if (!isConfigured) {
+    if (!isAvailable) {
       throw const ServiceException(_service, ServiceFailure.notConfigured);
     }
     return callService(
@@ -151,12 +152,10 @@ class GptService {
 
   static String? _str(Object? v) => v is String && v.isNotEmpty ? v : null;
 
-  /// Backward-compatible: default explanation now returns a short version.
-  Future<String> explainWord(String eng) => explainWordShort(eng);
-
   /// Generates a concise explanation about the English word [eng].
   /// About 3x shorter than the detailed version.
-  Future<String> explainWordShort(String eng) async {
+  @override
+  Future<String> explainShort(String eng) async {
     final prompt =
         "Ты — полезный словарный ассистент. Дай короткое, ёмкое объяснение английского слова '"
         "$eng' на русском языке: значение, 1–2 простых примера, типичное употребление/нюанс. "
@@ -168,7 +167,8 @@ class GptService {
   }
 
   /// Generates a detailed, extended explanation about the word [eng].
-  Future<String> explainWordLong(String eng) async {
+  @override
+  Future<String> explainLong(String eng) async {
     final prompt =
         "Ты — полезный словарный ассистент. Дай подробное, структурированное объяснение английского слова '"
         "$eng' на русском языке: основные значения/оттенки, регистр/нюансы, синонимы/антонимы, частые коллокации, 3–4 "

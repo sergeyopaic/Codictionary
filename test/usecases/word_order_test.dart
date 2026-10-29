@@ -1,21 +1,28 @@
+import 'package:codictionary/presentation/app_scope.dart';
+import 'package:codictionary/domain/services/word_explainer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/data/repositories/word_repository_impl.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
-import 'package:codictionary/services/gpt_service.dart';
-import 'package:codictionary/services/storage/safe_json_storage.dart';
-import 'package:codictionary/services/storage/storage_interface.dart';
+import 'package:codictionary/data/storage/safe_json_storage.dart';
+import 'package:codictionary/data/storage/storage_service.dart';
 
 import '../fakes/json_storage_service.dart';
 import '../fakes/memory_backend.dart';
 import '../helpers/test_dependencies.dart';
 
-class _Gpt extends GptService {
-  _Gpt() : super('');
+class _Gpt implements WordExplainer {
+  _Gpt();
   @override
-  Future<String> explainWordShort(String word) async => 'desc:$word';
+  Future<String> explainShort(String word) async => 'desc:$word';
+
+  @override
+  Future<String> explainLong(String word) async => 'long:$word';
+
+  @override
+  bool get isAvailable => false;
 }
 
 WordEntity _w(String id, String source, int day) => WordEntity(
@@ -29,10 +36,11 @@ WordEntity _w(String id, String source, int day) => WordEntity(
 final _initial = [_w('p', 'pear', 3), _w('a', 'apple', 1), _w('m', 'mango', 2)];
 
 void main() {
+  late AppUseCases useCases;
   late StorageService storage;
 
   Future<DictionaryViewModel> launch() async {
-    final vm = DictionaryViewModel();
+    final vm = DictionaryViewModel(useCases);
     await vm.load();
     return vm;
   }
@@ -42,7 +50,7 @@ void main() {
     List<WordEntity>? words,
   }) async {
     storage = withStorage ?? JsonStorageService();
-    await registerTestDependencies(storage: storage, gpt: _Gpt());
+    useCases = testUseCases(storage: storage, explainer: _Gpt());
     await seedWords(storage, words ?? _initial);
     return launch();
   }

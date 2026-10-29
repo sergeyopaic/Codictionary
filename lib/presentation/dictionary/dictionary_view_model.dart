@@ -1,20 +1,22 @@
 import 'package:flutter/foundation.dart';
 
-import '../../core/di/service_locator.dart';
 import '../../domain/entities/word_entity.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
 import '../../domain/exceptions/word_exceptions.dart';
 import '../../domain/usecases/add_word.dart';
+import '../../domain/usecases/explain_word.dart';
 import '../../domain/usecases/get_all_words.dart';
 import '../../domain/usecases/recover_words.dart';
 import '../../domain/usecases/remove_word.dart';
 import '../../domain/usecases/reorder_words.dart';
 import '../../domain/usecases/restore_word.dart';
+import '../../domain/usecases/translate_word.dart';
 import '../../domain/usecases/update_word.dart';
-import '../../services/gpt_service.dart';
-import '../../services/translate_service.dart';
+import '../app_scope.dart';
 import 'example_words.dart';
 
+/// Dictionary screen state. Depends only on domain use cases, passed in by
+/// the caller (see [AppScope]); no global service locator.
 class DictionaryViewModel extends ChangeNotifier {
   final GetAllWords _getAll;
   final AddWord _addWord;
@@ -23,19 +25,19 @@ class DictionaryViewModel extends ChangeNotifier {
   final RemoveWord _removeWord;
   final RecoverWords _recoverWords;
   final ReorderWords _reorderWords;
-  final GptService _gpt;
-  final TranslateService _translate;
+  final ExplainWord _explain;
+  final TranslateWord _translate;
 
-  DictionaryViewModel()
-    : _getAll = sl(),
-      _addWord = sl(),
-      _updateWord = sl(),
-      _restoreWord = sl(),
-      _removeWord = sl(),
-      _recoverWords = sl(),
-      _reorderWords = sl(),
-      _gpt = sl(),
-      _translate = sl();
+  DictionaryViewModel(AppUseCases useCases)
+    : _getAll = useCases.getAllWords,
+      _addWord = useCases.addWord,
+      _updateWord = useCases.updateWord,
+      _restoreWord = useCases.restoreWord,
+      _removeWord = useCases.removeWord,
+      _recoverWords = useCases.recoverWords,
+      _reorderWords = useCases.reorderWords,
+      _explain = useCases.explainWord,
+      _translate = useCases.translateWord;
 
   /// All words in the user's manual order, as stored. Sorting and search
   /// never change this list; only [reorder] does.
@@ -84,10 +86,10 @@ class DictionaryViewModel extends ChangeNotifier {
   final Set<Future<void>> _inFlight = {};
 
   /// False in local mode: no API key, so no explanations are requested.
-  bool get aiAvailable => _gpt.isConfigured;
+  bool get aiAvailable => _explain.isAvailable;
 
   /// False in local mode: translations are typed by the user.
-  bool get translationAvailable => _translate.isConfigured;
+  bool get translationAvailable => _translate.isAvailable;
 
   bool isGenerating(String id, ExplanationKind kind) =>
       _running[kind]!.containsKey(id);
@@ -511,7 +513,7 @@ class DictionaryViewModel extends ChangeNotifier {
   }
 
   Future<String> translateToRu(String eng) async {
-    return _translate.translateToRu(eng);
+    return _translate(eng);
   }
 
   /// Generates a new short explanation. Returns the text, or null if it
@@ -537,8 +539,8 @@ class DictionaryViewModel extends ChangeNotifier {
     final requested = word.source;
     try {
       final raw = kind == ExplanationKind.short
-          ? await _gpt.explainWordShort(requested)
-          : await _gpt.explainWordLong(requested);
+          ? await _explain.short(requested)
+          : await _explain.long(requested);
       final text = raw.replaceAll('*', '');
       final applied = await _applyGenerated(
         id,

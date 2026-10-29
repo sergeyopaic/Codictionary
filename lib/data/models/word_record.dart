@@ -1,7 +1,7 @@
 /// Persistence record for a word (the JSON shape on disk / in localStorage).
 /// Only the storage layer and `WordRepositoryImpl` use it; the rest of the app
 /// works with the domain `WordEntity`.
-class Word {
+class WordRecord {
   final String id;
   final String eng;
   final String rus;
@@ -9,7 +9,7 @@ class Word {
   final String? descLong;
   final DateTime addedAt;
 
-  Word({
+  WordRecord({
     required this.id,
     required this.eng,
     required this.rus,
@@ -18,13 +18,13 @@ class Word {
     required this.addedAt,
   });
 
-  Word copyWith({
+  WordRecord copyWith({
     String? eng,
     String? rus,
     String? desc,
     String? descLong,
     DateTime? addedAt,
-  }) => Word(
+  }) => WordRecord(
     id: id,
     eng: eng ?? this.eng,
     rus: rus ?? this.rus,
@@ -33,7 +33,7 @@ class Word {
     addedAt: addedAt ?? this.addedAt,
   );
 
-  factory Word.fromMap(Map<String, dynamic> m) {
+  factory WordRecord.fromMap(Map<String, dynamic> m) {
     // A missing id stays empty; WordRepositoryImpl assigns and persists one.
     final rawId = m['id'];
     final id = rawId is String ? rawId : '';
@@ -56,7 +56,7 @@ class Word {
       addedAt = DateTime.now();
     }
 
-    return Word(
+    return WordRecord(
       id: id,
       eng: eng,
       rus: rus,

@@ -1,5 +1,5 @@
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
-import 'package:codictionary/services/storage/storage_backend.dart';
+import 'package:codictionary/data/storage/storage_backend.dart';
 
 /// In-memory [StorageBackend] with switchable failures.
 class MemoryBackend implements StorageBackend {

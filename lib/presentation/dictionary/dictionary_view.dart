@@ -6,6 +6,7 @@ import 'package:reorderable_grid_view/reorderable_grid_view.dart';
 
 import '../../domain/entities/word_entity.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
+import '../app_scope.dart';
 import '../dialogs/confirm_bulk_delete_dialog.dart';
 import '../dialogs/confirm_delete_dialog.dart';
 import '../theme/app_tokens.dart';
@@ -42,7 +43,7 @@ class _DictionaryViewState extends State<DictionaryView> {
   @override
   void initState() {
     super.initState();
-    vm = DictionaryViewModel();
+    vm = DictionaryViewModel(AppScope.read(context));
     vm.load().whenComplete(() {
       if (mounted) setState(() => _loaded = true);
     });

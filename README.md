@@ -50,7 +50,7 @@ Everything stays on the device — there is no account and no backend.
 ## Tech
 
 - Flutter / Dart, Material 3
-- `get_it` for dependency injection
+- Constructor injection from a single composition root (no service locator)
 - `http` for the DeepL and OpenAI calls
 - `flutter_dotenv` for API keys
 - `reorderable_grid_view` for drag-and-drop
@@ -104,23 +104,19 @@ push and pull request.
 - `lib/presentation/vocabs/` — the vocabularies view and its dialog.
 - `lib/presentation/dialogs/`, `lib/presentation/widgets/` — shared dialogs and
   widgets.
-- `lib/domain/` — business logic: `entities`, `repositories` (abstractions),
-  `usecases`.
-- `lib/data/` — repository implementations.
-- `lib/services/` — legacy services (storage, DeepL, OpenAI) that the data layer
-  still wraps.
-- `lib/core/` — shared utilities and DI (`core/di`).
+- `lib/domain/` — business logic: `entities`, `repositories` and `services`
+  (interfaces), `usecases`, `exceptions`.
+- `lib/data/` — implementations: storage (`storage/`), OpenAI and DeepL clients
+  (`remote/`), the JSON record (`models/`) and repositories.
+- `lib/composition/` — reads `.env` and wires data implementations into the
+  domain use cases.
 
-## Architecture (work in progress)
+## Architecture
 
-The code is being migrated step by step towards Clean Architecture with MVVM. The
-target layout and rules are described in [ARCHITECTURE.MD](ARCHITECTURE.MD).
+Clean Architecture with MVVM: `presentation → domain ← data`, and only
+`lib/composition/` connects the two. The rules are described in
+[ARCHITECTURE.MD](ARCHITECTURE.MD) and enforced by `test/architecture_test.dart`.
 
-Bootstrap happens in `main()`, which calls `registerInitialDependencies()` and
-registers the app services in the service locator.
-
-Next steps:
-
-- Migrate features into `domain` / `data` / `presentation` slices gradually.
-- Replace direct calls to legacy services with use cases (e.g. `AddWord`).
-- Keep widgets thin; inject dependencies through the service locator for now.
+`main()` reads the config, calls `buildProductionUseCases()` and passes the
+result to `CodictionaryApp`, which provides it to the UI through `AppScope`.
+ViewModels receive their use cases through the constructor.

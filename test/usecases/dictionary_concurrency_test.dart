@@ -1,8 +1,9 @@
+import 'package:codictionary/presentation/app_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/data/repositories/word_repository_impl.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
-import 'package:codictionary/models/word.dart';
+import 'package:codictionary/data/models/word_record.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
 
 import '../fakes/json_storage_service.dart';
@@ -14,13 +15,13 @@ class _SlowStorage extends JsonStorageService {
   static const _delay = Duration(milliseconds: 5);
 
   @override
-  Future<List<Word>> loadWords() async {
+  Future<List<WordRecord>> loadWords() async {
     await Future<void>.delayed(_delay);
     return super.loadWords();
   }
 
   @override
-  Future<void> saveWords(List<Word> words) async {
+  Future<void> saveWords(List<WordRecord> words) async {
     await Future<void>.delayed(_delay);
     return super.saveWords(words);
   }
@@ -34,6 +35,7 @@ WordEntity _word(String id, String source) => WordEntity(
 );
 
 void main() {
+  late AppUseCases useCases;
   late JsonStorageService storage;
   late ControlledGpt gpt;
   late DictionaryViewModel vm;
@@ -42,8 +44,8 @@ void main() {
   Future<void> setUpVm({JsonStorageService? withStorage}) async {
     storage = withStorage ?? JsonStorageService();
     gpt = ControlledGpt();
-    await registerTestDependencies(storage: storage, gpt: gpt);
-    vm = DictionaryViewModel();
+    useCases = testUseCases(storage: storage, explainer: gpt);
+    vm = DictionaryViewModel(useCases);
     await seedWords(storage, [_word('1', 'apple'), _word('2', 'zebra')]);
     await vm.load();
   }

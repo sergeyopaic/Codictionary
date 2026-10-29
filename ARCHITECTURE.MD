@@ -1,7 +1,7 @@
 # Project Architecture
 
 This document describes the architecture, folder structure, and conventions used in this project.  
-We follow **Clean Architecture** principles with **MVVM (Model–View–ViewModel)**. State is managed with plain Flutter **ChangeNotifier/ValueNotifier** ViewModels; dependency injection uses **get_it**.
+We follow **Clean Architecture** principles with **MVVM (Model–View–ViewModel)**. State is managed with plain Flutter **ChangeNotifier/ValueNotifier** ViewModels; dependencies are passed explicitly (constructor injection from a single composition root, no service locator).
 
 ---
 
@@ -35,63 +35,66 @@ Our codebase is organized into **three main layers**:
 
 ## 2. Folder Structure
 
+Actual layout (the Flutter project lives in the repository root):
+
 ```
 lib/
-├─ presentation/ # UI Layer
-│ ├─ core/ # Shared UI elements
-│ │ ├─ widgets/ # Shared reusable widgets
-│ │ └─ theme/ # App themes & styling
-│ └─ <feature_name>/ # Each feature's UI & controller
-│   ├─ <feature_name>_view.dart # Root view
-│   ├─ <feature_name>_view_model.dart # ViewModel (ChangeNotifier/ValueNotifier)
-│   ├─ widgets/ # Feature-specific widgets/screens
-│   └─ routing.dart # Feature-local route(s)
+├─ main.dart            # Entry point: load config, build dependencies, runApp
+├─ composition/         # Composition root — the only code that imports data/
+│ ├─ app_config.dart    # Reads .env (missing keys → local mode)
+│ └─ app_dependencies.dart # buildUseCases / buildProductionUseCases
 │
-├─ domain/ # Business Layer
-│ ├─ models/ # Pure domain models
-│ ├─ repositories/ # Abstract repository interfaces
-│ └─ usecases/ # Application-specific actions
+├─ presentation/        # UI layer
+│ ├─ app.dart           # CodictionaryApp (MaterialApp + AppScope)
+│ ├─ app_scope.dart     # AppUseCases bundle + AppScope InheritedWidget
+│ ├─ theme/ widgets/ dialogs/ shell/
+│ ├─ dictionary/        # dictionary_view.dart, dictionary_view_model.dart, widgets/
+│ └─ vocabs/
 │
-├─ data/ # Data Layer
-│ ├─ models/ # Integration models (DTOs, persistence entities if any)
-│ ├─ services/ # API/database clients
-│ ├─ mappers/ # Data ↔ Domain conversion
-│ └─ repositories/ # Implementations of domain repositories
+├─ domain/              # Business layer (pure Dart)
+│ ├─ entities/          # WordEntity, Vocabulary
+│ ├─ repositories/      # WordRepository, VocabularyRepository (interfaces)
+│ ├─ services/          # WordExplainer, Translator (interfaces)
+│ ├─ usecases/          # AddWord, UpdateWord, ExplainWord, TranslateWord, …
+│ └─ exceptions/        # Storage, service and word errors
 │
-├─ composition/ # Dependency injection setup
-│ ├─ di.dart # get_it service locator registrations
-│ └─ env.dart # Environment config (staging, dev, prod)
+├─ data/                # Implementations of domain contracts
+│ ├─ models/            # WordRecord (JSON shape on disk)
+│ ├─ storage/           # SafeJsonStorage + file / localStorage backends
+│ ├─ remote/            # OpenAiExplainer, DeepLTranslator, retry/timeout helper
+│ └─ repositories/      # WordRepositoryImpl, VocabularyRepositoryImpl
 │
-├─ config/ # Build-time configs, constants, environment setup
-├─ routing/ # App routing (GoRouter configuration)
-├─ utils/ # Pure helper functions (non-layer specific)
-├─ main.dart # Production entry point
-├─ main_development.dart # Dev entry point
-└─ main_staging.dart # Staging entry point
+└─ core/usecase.dart    # UseCase base type
 ```
-
 
 ---
 
 ## 3. Dependency Rules
 
-We enforce **strict layer boundaries**:
+We enforce **strict layer boundaries** (checked by `test/architecture_test.dart`):
 
 ```
-presentation ---> domain ---> data
+presentation ──► domain ◄── data
+        ▲                    ▲
+        └──── composition ───┘   (wires data implementations into domain contracts)
 ```
 
-- **Presentation**  
-  - Can depend on: `domain`, `composition`, `config`, `utils`.
-  - ❌ Must not import anything from `data` directly.
+- **Presentation**
+  - Can depend on: `domain` only (use cases, entities, exceptions).
+  - ❌ Must not import `data`, `composition`, HTTP, storage or `.env` packages.
+  - Gets its use cases from `AppScope`; ViewModels receive them via the constructor.
 
-- **Domain**  
-  - Pure Dart.  
-  - Must not depend on: `presentation`, `data`, or Flutter SDK (UI).
+- **Domain**
+  - Pure Dart.
+  - Must not depend on: `presentation`, `data`, `composition`, or Flutter.
+  - Declares interfaces for everything external (repositories, `WordExplainer`, `Translator`).
 
-- **Data**  
-  - Can depend on: `domain`, `utils`.
-  - Must not depend on: `presentation`.
+- **Data**
+  - Can depend on: `domain`.
+  - Must not depend on: `presentation` or `composition`.
+
+- **Composition**
+  - The only place that constructs data implementations and connects them to domain contracts.
 
 ---
 
@@ -143,10 +146,12 @@ We treat our controllers as **ViewModels** built on Flutter notifiers:
 
 Located in `lib/composition/`.
 
-- `di.dart`: get_it service locator setup (registers repositories, use-cases, router). Entry: `AppDI.init()`.
-- `env.dart`: Environment-specific constants, base URLs, feature flags.
+- `app_config.dart`: reads `.env`. A missing file or key is not an error; the affected service runs in local mode.
+- `app_dependencies.dart`:
+  - `buildUseCases({storage, explainer, translator})` builds the whole object graph (one repository per storage, all use cases) and returns an `AppUseCases` bundle.
+  - `buildProductionUseCases(config)` adds the platform storage and the OpenAI / DeepL clients.
 
-This concentrates dependency wiring in one place and keeps tests simple to override by registering alternative implementations in the locator.
+`main.dart` calls `buildProductionUseCases` once and passes the result to `CodictionaryApp`, which provides it through `AppScope`. Nothing is registered globally, so rebuilding the app has no side effects. Tests call `buildUseCases` with fakes (`test/helpers/test_dependencies.dart`) and get an independent graph per test.
 
 ---
 

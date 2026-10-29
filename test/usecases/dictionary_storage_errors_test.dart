@@ -1,29 +1,33 @@
+import 'package:codictionary/presentation/app_scope.dart';
+import 'package:codictionary/domain/services/word_explainer.dart';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
-import 'package:codictionary/models/word.dart';
+import 'package:codictionary/data/models/word_record.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
-import 'package:codictionary/services/gpt_service.dart';
-import 'package:codictionary/services/storage/safe_json_storage.dart';
+import 'package:codictionary/data/storage/safe_json_storage.dart';
 
 import '../fakes/memory_backend.dart';
 import '../helpers/test_dependencies.dart';
 
 const _key = 'dictionary.json';
 
-class _Gpt extends GptService {
-  _Gpt() : super('');
+class _Gpt implements WordExplainer {
+  _Gpt();
   @override
-  Future<String> explainWordShort(String word) async => 'desc:$word';
+  Future<String> explainShort(String word) async => 'desc:$word';
   @override
-  Future<String> explainWordLong(String word) async => 'long:$word';
+  Future<String> explainLong(String word) async => 'long:$word';
+
+  @override
+  bool get isAvailable => false;
 }
 
 String _stored(List<String> words) => jsonEncode([
   for (var i = 0; i < words.length; i++)
-    Word(
+    WordRecord(
       id: '${i + 1}',
       eng: words[i],
       rus: 'ru:${words[i]}',
@@ -32,19 +36,20 @@ String _stored(List<String> words) => jsonEncode([
 ]);
 
 void main() {
+  late AppUseCases useCases;
   late MemoryBackend backend;
 
   Future<DictionaryViewModel> start(Map<String, String> values) async {
     backend = MemoryBackend(values);
-    await registerTestDependencies(
+    useCases = testUseCases(
       storage: SafeJsonStorage(
         backend,
         wordsKey: _key,
         vocabsKey: 'vocabularies.json',
       ),
-      gpt: _Gpt(),
+      explainer: _Gpt(),
     );
-    final vm = DictionaryViewModel();
+    final vm = DictionaryViewModel(useCases);
     await vm.load();
     return vm;
   }

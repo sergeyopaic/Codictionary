@@ -1,44 +1,46 @@
+import 'package:codictionary/presentation/app_scope.dart';
+import 'package:codictionary/domain/services/word_explainer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
-import 'package:codictionary/services/gpt_service.dart';
 
 import 'fakes/json_storage_service.dart';
 import 'helpers/test_dependencies.dart';
 
-class _FakeGpt extends GptService {
-  _FakeGpt() : super('');
+class _FakeGpt implements WordExplainer {
+  _FakeGpt();
   bool fail = false;
 
   @override
-  bool get isConfigured => true;
+  bool get isAvailable => true;
 
   @override
-  Future<String> explainWordShort(String word) async {
+  Future<String> explainShort(String word) async {
     if (fail) throw Exception('offline');
     return 'desc:$word';
   }
 
   @override
-  Future<String> explainWordLong(String word) async {
+  Future<String> explainLong(String word) async {
     if (fail) throw Exception('offline');
     return 'long:$word';
   }
 }
 
 void main() {
+  late AppUseCases useCases;
   late JsonStorageService storage;
   late _FakeGpt gpt;
 
   setUp(() async {
     storage = JsonStorageService();
     gpt = _FakeGpt();
-    await registerTestDependencies(storage: storage, gpt: gpt);
+    useCases = testUseCases(storage: storage, explainer: gpt);
   });
 
   /// A fresh view model over the same storage, i.e. an app restart.
   Future<DictionaryViewModel> restart() async {
-    final vm = DictionaryViewModel();
+    final vm = DictionaryViewModel(useCases);
     await vm.load();
     return vm;
   }
@@ -47,7 +49,7 @@ void main() {
       vm.words.firstWhere((w) => w.source == eng);
 
   test('DictionaryViewModel basic flow: load, add, edit, delete', () async {
-    final vm = DictionaryViewModel();
+    final vm = DictionaryViewModel(useCases);
     final seed = [
       WordEntity(
         id: '1',
@@ -167,7 +169,7 @@ void main() {
   });
 
   test('regenerated explanation reaches the grid (filtered list)', () async {
-    final vm = DictionaryViewModel();
+    final vm = DictionaryViewModel(useCases);
     await seedWords(storage, [
       WordEntity(
         id: '1',

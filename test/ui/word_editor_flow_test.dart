@@ -1,3 +1,4 @@
+import 'package:codictionary/presentation/app_scope.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -5,7 +6,7 @@ import 'package:codictionary/domain/exceptions/service_exceptions.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
 import 'package:codictionary/presentation/dictionary/widgets/word_editor_dialog.dart';
 import 'package:codictionary/presentation/theme/app_theme.dart';
-import 'package:codictionary/services/translate_service.dart';
+import 'package:codictionary/domain/services/translator.dart';
 
 import '../fakes/json_storage_service.dart';
 import '../helpers/test_dependencies.dart';
@@ -13,20 +14,21 @@ import '../helpers/test_dependencies.dart';
 const _debounce = Duration(milliseconds: 600);
 
 void main() {
+  late AppUseCases useCases;
   late DictionaryViewModel vm;
   late ControlledTranslate translate;
 
   Future<void> openEditor(
     WidgetTester tester, {
-    TranslateService? withTranslate,
+    Translator? withTranslate,
   }) async {
     translate = ControlledTranslate();
-    await registerTestDependencies(
+    useCases = testUseCases(
       storage: JsonStorageService(),
-      gpt: ControlledGpt(),
-      translate: withTranslate ?? translate,
+      explainer: ControlledGpt(),
+      translator: withTranslate ?? translate,
     );
-    vm = DictionaryViewModel();
+    vm = DictionaryViewModel(useCases);
     await vm.load();
     await tester.pumpWidget(
       MaterialApp(

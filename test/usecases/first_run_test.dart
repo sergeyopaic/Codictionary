@@ -1,10 +1,11 @@
+import 'package:codictionary/presentation/app_scope.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
 import 'package:codictionary/presentation/dictionary/example_words.dart';
-import 'package:codictionary/services/storage/safe_json_storage.dart';
+import 'package:codictionary/data/storage/safe_json_storage.dart';
 
 import '../fakes/memory_backend.dart';
 import '../helpers/test_dependencies.dart';
@@ -12,6 +13,7 @@ import '../helpers/test_dependencies.dart';
 const _key = 'dictionary.json';
 
 void main() {
+  late AppUseCases useCases;
   late MemoryBackend backend;
   late SafeJsonStorage storage;
   late ControlledGpt gpt;
@@ -24,12 +26,12 @@ void main() {
       vocabsKey: 'vocabularies.json',
     );
     gpt = ControlledGpt();
-    await registerTestDependencies(storage: storage, gpt: gpt);
+    useCases = testUseCases(storage: storage, explainer: gpt);
   });
 
   /// A fresh view model over the same storage, i.e. an app (re)start.
   Future<DictionaryViewModel> launch() async {
-    final vm = DictionaryViewModel();
+    final vm = DictionaryViewModel(useCases);
     await vm.load();
     return vm;
   }

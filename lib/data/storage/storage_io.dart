@@ -7,7 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
 import 'safe_json_storage.dart';
 import 'storage_backend.dart';
-import 'storage_interface.dart';
+import 'storage_service.dart';
 
 /// Stores each key as a file in a directory.
 class FileBackend implements StorageBackend {

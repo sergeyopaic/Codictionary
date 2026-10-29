@@ -1,44 +1,49 @@
+import 'package:codictionary/presentation/app_scope.dart';
+import 'package:codictionary/domain/services/word_explainer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:codictionary/data/repositories/word_repository_impl.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
 import 'package:codictionary/domain/exceptions/service_exceptions.dart';
 import 'package:codictionary/presentation/dictionary/dictionary_view_model.dart';
-import 'package:codictionary/services/gpt_service.dart';
 
 import '../fakes/json_storage_service.dart';
 import '../helpers/test_dependencies.dart';
 
 /// GPT fake answering from a script: a String is returned, a
 /// [ServiceException] is thrown.
-class _ScriptedGpt extends GptService {
-  _ScriptedGpt(this.script, {this.configured = true}) : super('');
+class _ScriptedGpt implements WordExplainer {
+  _ScriptedGpt(this.script, {this.configured = true});
 
   final List<Object> script;
   final bool configured;
   int calls = 0;
 
   @override
-  bool get isConfigured => configured;
+  bool get isAvailable => configured;
 
   @override
-  Future<String> explainWordShort(String word) async {
+  Future<String> explainShort(String word) async {
     final next = script[calls++];
     if (next is ServiceException) throw next;
     return next as String;
   }
+
+  @override
+  Future<String> explainLong(String word) async => 'long:$word';
 }
 
 const _offline = ServiceException('OpenAI', ServiceFailure.network);
 const _noCredit = ServiceException('OpenAI', ServiceFailure.quotaExceeded);
 
 void main() {
+  late AppUseCases useCases;
   late JsonStorageService storage;
 
   Future<DictionaryViewModel> start(dynamic gpt) async {
     storage = JsonStorageService();
-    await registerTestDependencies(storage: storage, gpt: gpt);
-    final vm = DictionaryViewModel();
+    useCases = testUseCases(storage: storage, explainer: gpt);
+    final vm = DictionaryViewModel(useCases);
     await vm.load();
     return vm;
   }

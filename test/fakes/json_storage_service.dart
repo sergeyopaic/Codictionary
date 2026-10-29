@@ -1,12 +1,12 @@
 import 'dart:convert';
 
 import 'package:codictionary/domain/exceptions/storage_exceptions.dart';
-import 'package:codictionary/models/word.dart';
-import 'package:codictionary/services/storage/storage_interface.dart';
+import 'package:codictionary/data/models/word_record.dart';
+import 'package:codictionary/data/storage/storage_service.dart';
 
 /// In-memory storage that keeps data as a JSON string, exactly like the file
-/// and localStorage implementations. Going through [Word.toMap] /
-/// [Word.fromMap] on every call exercises the real persistence mapping.
+/// and localStorage implementations. Going through [WordRecord.toMap] /
+/// [WordRecord.fromMap] on every call exercises the real persistence mapping.
 class JsonStorageService implements StorageService {
   JsonStorageService({List<Map<String, dynamic>>? rawWords})
     : wordsJson = jsonEncode(rawWords ?? const []);
@@ -18,10 +18,11 @@ class JsonStorageService implements StorageService {
       (jsonDecode(wordsJson) as List).cast<Map<String, dynamic>>();
 
   @override
-  Future<List<Word>> loadWords() async => rawWords.map(Word.fromMap).toList();
+  Future<List<WordRecord>> loadWords() async =>
+      rawWords.map(WordRecord.fromMap).toList();
 
   @override
-  Future<void> saveWords(List<Word> words) async =>
+  Future<void> saveWords(List<WordRecord> words) async =>
       wordsJson = jsonEncode(words.map((w) => w.toMap()).toList());
 
   @override

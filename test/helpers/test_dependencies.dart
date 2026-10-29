@@ -1,42 +1,25 @@
 import 'dart:async';
 
-import 'package:codictionary/core/di/service_locator.dart';
+import 'package:codictionary/composition/app_dependencies.dart';
 import 'package:codictionary/data/repositories/word_repository_impl.dart';
+import 'package:codictionary/data/storage/storage_service.dart';
 import 'package:codictionary/domain/entities/word_entity.dart';
-import 'package:codictionary/domain/repositories/word_repository.dart';
-import 'package:codictionary/domain/usecases/add_word.dart';
-import 'package:codictionary/domain/usecases/get_all_words.dart';
-import 'package:codictionary/domain/usecases/recover_words.dart';
-import 'package:codictionary/domain/usecases/remove_word.dart';
-import 'package:codictionary/domain/usecases/reorder_words.dart';
-import 'package:codictionary/domain/usecases/restore_word.dart';
-import 'package:codictionary/domain/usecases/update_word.dart';
-import 'package:codictionary/services/gpt_service.dart';
-import 'package:codictionary/services/storage/storage_interface.dart';
-import 'package:codictionary/services/translate_service.dart';
+import 'package:codictionary/domain/services/translator.dart';
+import 'package:codictionary/domain/services/word_explainer.dart';
+import 'package:codictionary/presentation/app_scope.dart';
 
-/// Registers the real repository and use cases over [storage], plus fakes for
-/// the external AI and translation services.
-Future<void> registerTestDependencies({
+/// The app's real wiring ([buildUseCases]) over [storage], with fakes for
+/// the external AI and translation services. No global state: every call
+/// returns an independent object graph.
+AppUseCases testUseCases({
   required StorageService storage,
-  required GptService gpt,
-  TranslateService? translate,
-}) async {
-  await sl.reset();
-  sl
-    ..registerLazySingleton<WordRepository>(() => WordRepositoryImpl(storage))
-    ..registerFactory<GetAllWords>(() => GetAllWords(sl()))
-    ..registerFactory<AddWord>(() => AddWord(sl()))
-    ..registerFactory<UpdateWord>(() => UpdateWord(sl()))
-    ..registerFactory<RestoreWord>(() => RestoreWord(sl()))
-    ..registerFactory<RecoverWords>(() => RecoverWords(sl()))
-    ..registerFactory<ReorderWords>(() => ReorderWords(sl()))
-    ..registerFactory<RemoveWord>(() => RemoveWord(sl()))
-    ..registerLazySingleton<GptService>(() => gpt)
-    ..registerLazySingleton<TranslateService>(
-      () => translate ?? FakeTranslate(),
-    );
-}
+  WordExplainer? explainer,
+  Translator? translator,
+}) => buildUseCases(
+  storage: storage,
+  explainer: explainer ?? const NoExplainer(),
+  translator: translator ?? FakeTranslate(),
+);
 
 /// Stores [words] through the real repository, as if a user had added them
 /// in an earlier session.
@@ -47,21 +30,36 @@ Future<void> seedWords(StorageService storage, List<WordEntity> words) async {
   }
 }
 
-class FakeTranslate extends TranslateService {
-  FakeTranslate() : super('');
+/// Local mode: no AI configured.
+class NoExplainer implements WordExplainer {
+  const NoExplainer();
+
+  @override
+  bool get isAvailable => false;
+
+  @override
+  Future<String> explainShort(String word) => throw StateError('not set up');
+
+  @override
+  Future<String> explainLong(String word) => throw StateError('not set up');
+}
+
+/// Local mode translator: not configured.
+class FakeTranslate implements Translator {
+  @override
+  bool get isAvailable => false;
+
   @override
   Future<String> translateToRu(String eng) async => 'ru:$eng';
 }
 
-/// GPT fake whose responses the test releases explicitly, in any order.
-class ControlledGpt extends GptService {
-  ControlledGpt() : super('');
-
-  @override
-  bool get isConfigured => true;
-
+/// Explainer whose responses the test releases explicitly, in any order.
+class ControlledGpt implements WordExplainer {
   final List<({String kind, String word, Completer<String> completer})> calls =
       [];
+
+  @override
+  bool get isAvailable => true;
 
   Future<String> _call(String kind, String word) {
     final completer = Completer<String>();
@@ -70,10 +68,10 @@ class ControlledGpt extends GptService {
   }
 
   @override
-  Future<String> explainWordShort(String word) => _call('short', word);
+  Future<String> explainShort(String word) => _call('short', word);
 
   @override
-  Future<String> explainWordLong(String word) => _call('long', word);
+  Future<String> explainLong(String word) => _call('long', word);
 
   /// Answers call [i] with "kind:word#i".
   void answer(int i) {
@@ -83,13 +81,11 @@ class ControlledGpt extends GptService {
 }
 
 /// Translation fake whose answers the test releases explicitly.
-class ControlledTranslate extends TranslateService {
-  ControlledTranslate() : super('');
+class ControlledTranslate implements Translator {
+  final List<({String text, Completer<String> completer})> calls = [];
 
   @override
-  bool get isConfigured => true;
-
-  final List<({String text, Completer<String> completer})> calls = [];
+  bool get isAvailable => true;
 
   @override
   Future<String> translateToRu(String eng) {

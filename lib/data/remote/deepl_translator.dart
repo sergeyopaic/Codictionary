@@ -2,14 +2,15 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../domain/exceptions/service_exceptions.dart';
-import 'http/service_call.dart';
+import '../../domain/exceptions/service_exceptions.dart';
+import '../../domain/services/translator.dart';
+import 'service_call.dart';
 
 /// DeepL client for EN → RU translation.
 ///
 /// Returns the translation or throws a [ServiceException].
-class TranslateService {
-  TranslateService(
+class DeepLTranslator implements Translator {
+  DeepLTranslator(
     this.deeplApiKey, {
     http.Client? client,
     Uri? endpoint,
@@ -38,11 +39,12 @@ class TranslateService {
             : 'https://api.deepl.com/v2/translate',
       );
 
-  /// False in local mode (no key): translations are typed by the user.
-  bool get isConfigured => deeplApiKey.trim().isNotEmpty;
+  @override
+  bool get isAvailable => deeplApiKey.trim().isNotEmpty;
 
+  @override
   Future<String> translateToRu(String text) async {
-    if (!isConfigured) {
+    if (!isAvailable) {
       throw const ServiceException(_service, ServiceFailure.notConfigured);
     }
     return callService(

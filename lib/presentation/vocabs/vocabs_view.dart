@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../core/di/service_locator.dart';
+import '../../domain/entities/vocabulary.dart';
 import '../../domain/exceptions/storage_exceptions.dart';
-import '../../services/storage_service.dart';
+import '../../domain/usecases/get_vocabularies.dart';
+import '../../domain/usecases/save_vocabularies.dart';
+import '../app_scope.dart';
 import '../dialogs/confirm_dialog.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state.dart';
@@ -17,8 +19,9 @@ class VocabsView extends StatefulWidget {
 }
 
 class _VocabsViewState extends State<VocabsView> {
-  final List<_Vocab> _vocabs = [];
-  late final StorageService _storage;
+  final List<Vocabulary> _vocabs = [];
+  late final GetVocabularies _getVocabularies;
+  late final SaveVocabularies _saveVocabularies;
   bool _loaded = false;
 
   /// Set when stored vocabularies could not be read. Editing is disabled so
@@ -28,15 +31,17 @@ class _VocabsViewState extends State<VocabsView> {
   @override
   void initState() {
     super.initState();
-    _storage = sl<StorageService>();
+    final useCases = AppScope.read(context);
+    _getVocabularies = useCases.getVocabularies;
+    _saveVocabularies = useCases.saveVocabularies;
     _load();
   }
 
   Future<void> _load() async {
-    List<Map<String, String>> raw = const [];
+    List<Vocabulary> loaded = const [];
     StorageException? error;
     try {
-      raw = await _storage.loadVocabularies();
+      loaded = await _getVocabularies();
     } on StorageException catch (e) {
       error = e;
     }
@@ -44,7 +49,7 @@ class _VocabsViewState extends State<VocabsView> {
     setState(() {
       _vocabs
         ..clear()
-        ..addAll(raw.map(_Vocab.fromMap));
+        ..addAll(loaded);
       _loadError = error;
       _loaded = true;
     });
@@ -55,7 +60,7 @@ class _VocabsViewState extends State<VocabsView> {
   Future<void> _persist() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await _storage.saveVocabularies(_vocabs.map((e) => e.toMap()).toList());
+      await _saveVocabularies(List.of(_vocabs));
     } on StorageException catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Not saved: ${e.message}')),
@@ -67,7 +72,7 @@ class _VocabsViewState extends State<VocabsView> {
   Future<void> _create() async {
     final res = await showCreateVocabularyDialog(context);
     if (res == null) return;
-    setState(() => _vocabs.add(_Vocab.fromMap(res)));
+    setState(() => _vocabs.add(_fromDialog(res)));
     await _persist();
   }
 
@@ -80,7 +85,7 @@ class _VocabsViewState extends State<VocabsView> {
       initialIcon: v.iconPath,
     );
     if (res == null) return;
-    setState(() => _vocabs[index] = _Vocab.fromMap(res));
+    setState(() => _vocabs[index] = _fromDialog(res));
     await _persist();
   }
 
@@ -212,31 +217,15 @@ class _VocabsViewState extends State<VocabsView> {
   }
 }
 
-class _Vocab {
-  final String name;
-  final String description;
-  final String iconPath;
-  const _Vocab({
-    required this.name,
-    required this.description,
-    required this.iconPath,
-  });
-
-  Map<String, String> toMap() => {
-    'name': name,
-    'description': description,
-    'icon': iconPath,
-  };
-
-  factory _Vocab.fromMap(Map<String, String> m) => _Vocab(
-    name: (m['name'] ?? '').isEmpty ? 'Untitled' : m['name']!,
-    description: m['description'] ?? '',
-    iconPath: m['icon'] ?? vocabIconPath(1),
-  );
-}
+/// Builds a vocabulary from the create/edit dialog result.
+Vocabulary _fromDialog(Map<String, String> m) => Vocabulary(
+  name: (m['name'] ?? '').isEmpty ? 'Untitled' : m['name']!,
+  description: m['description'] ?? '',
+  iconPath: m['icon'] ?? vocabIconPath(1),
+);
 
 class _VocabCard extends StatelessWidget {
-  final _Vocab vocab;
+  final Vocabulary vocab;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   const _VocabCard({
